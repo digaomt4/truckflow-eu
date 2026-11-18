@@ -1,0 +1,21 @@
+{
+  "name": "TruckFlow EU — Gestão do Motorista Internacional",
+  "short_name": "TruckFlow EU",
+  "description": "Gestão diária na cabine: cálculo salarial por KM, tacógrafo CE 561/2006, checklist de engate e scanner de CMR.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "lang": "pt-PT",
+  "categories": ["productivity", "utilities", "business"],
+  "icons": [
+    {
+      "src": "/icons/truckflow-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

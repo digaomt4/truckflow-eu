@@ -1,0 +1,202 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root,
+html.dark {
+  color-scheme: dark;
+  --ios-bg: #000000;
+  --ios-card: #1c1c1e;
+  --ios-card-elevated: #2c2c2e;
+  --ios-fill: #2c2c2e;
+  --ios-fill-secondary: #3a3a3c;
+  --ios-glass: rgba(28, 28, 30, 0.78);
+  --ios-sep: rgba(84, 84, 88, 0.55);
+  --ios-label: #ffffff;
+  --ios-label-secondary: #8e8e93;
+  --ios-label-tertiary: #636366;
+  --ios-blue: #0a84ff;
+  --ios-green: #30d158;
+  --ios-orange: #ff9f0a;
+  --ios-red: #ff453a;
+  --ios-indigo: #5e5ce6;
+  --ios-teal: #64d2ff;
+  --ios-shadow: none;
+}
+
+html.light {
+  color-scheme: light;
+  --ios-bg: #f2f2f7;
+  --ios-card: #ffffff;
+  --ios-card-elevated: #ffffff;
+  --ios-fill: #e5e5ea;
+  --ios-fill-secondary: #d1d1d6;
+  --ios-glass: rgba(249, 249, 251, 0.82);
+  --ios-sep: rgba(60, 60, 67, 0.16);
+  --ios-label: #000000;
+  --ios-label-secondary: #6c6c70;
+  --ios-label-tertiary: #aeaeb2;
+  --ios-blue: #007aff;
+  --ios-green: #34c759;
+  --ios-orange: #ff9500;
+  --ios-red: #ff3b30;
+  --ios-indigo: #5856d6;
+  --ios-teal: #32ade6;
+  --ios-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+@layer base {
+  html,
+  body {
+    background-color: var(--ios-bg);
+    color: var(--ios-label);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
+      'Helvetica Neue', Inter, system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: contain;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.safe-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+/* Barra translúcida estilo Apple iOS */
+.ios-glass {
+  background-color: var(--ios-glass);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* Cartão Inset Grouped estilo iPhone */
+.ios-card {
+  background-color: var(--ios-card);
+  border-radius: 18px;
+  box-shadow: var(--ios-shadow);
+  border: 0.5px solid var(--ios-sep);
+}
+
+.ios-fill {
+  background-color: var(--ios-fill);
+}
+
+.ios-sep-border {
+  border-color: var(--ios-sep);
+}
+
+/* Controle Segmentado nativo do iOS */
+.ios-segmented {
+  background-color: var(--ios-fill);
+  border-radius: 12px;
+  padding: 3px;
+  display: grid;
+  gap: 3px;
+}
+
+.ios-segmented-item {
+  min-height: 40px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ios-label-secondary);
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ios-segmented-item[aria-selected='true'],
+.ios-segmented-item.is-active {
+  background-color: var(--ios-card);
+  color: var(--ios-label);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
+}
+
+/* Interruptor nativo iOS (Switch) */
+.ios-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 52px;
+  height: 32px;
+  border-radius: 9999px;
+  background-color: var(--ios-fill-secondary);
+  transition: background-color 0.22s ease;
+  flex-shrink: 0;
+  padding: 2px;
+}
+
+.ios-switch[aria-checked='true'] {
+  background-color: var(--ios-green);
+}
+
+.ios-switch-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background-color: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.26);
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ios-switch[aria-checked='true'] .ios-switch-thumb {
+  transform: translateX(20px);
+}
+
+/* Folha modal (iOS Sheet) */
+dialog.cab-dialog {
+  background: transparent;
+  color: var(--ios-label);
+  max-width: 32rem;
+  width: calc(100% - 1rem);
+  margin: auto;
+  padding: 0;
+  border: none;
+  border-radius: 24px;
+  overflow: visible;
+}
+
+dialog.cab-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.62);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+html.light dialog.cab-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.ios-sheet {
+  background-color: var(--ios-card);
+  color: var(--ios-label);
+  border-radius: 24px;
+  border: 0.5px solid var(--ios-sep);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+}
+
+.ios-grabber {
+  width: 38px;
+  height: 5px;
+  border-radius: 9999px;
+  background-color: var(--ios-fill-secondary);
+  margin: 0 auto 12px auto;
+}
+
+/* Inputs limpos estilo iOS */
+.ios-input {
+  background-color: var(--ios-fill);
+  color: var(--ios-label);
+  border-radius: 12px;
+  border: 1px solid transparent;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.ios-input:focus {
+  outline: none;
+  border-color: var(--ios-blue);
+}
+
+.ios-input::placeholder {
+  color: var(--ios-label-tertiary);
+}

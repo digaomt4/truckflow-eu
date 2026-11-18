@@ -1,0 +1,1058 @@
+<!doctype html>
+<html lang="pt-PT" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#020617" />
+    <meta name="color-scheme" content="dark" />
+    <title>TruckFlow EU — Preview Completo (Módulos 1 a 4)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+      };
+    </script>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        background-color: #020617;
+        color: #f1f5f9;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .tabular-nums {
+        font-variant-numeric: tabular-nums;
+      }
+      dialog.cab-dialog {
+        background: transparent;
+        color: inherit;
+        max-width: 32rem;
+        width: calc(100% - 1.5rem);
+        margin: auto;
+        padding: 0;
+        border: none;
+        border-radius: 1.25rem;
+      }
+      dialog.cab-dialog::backdrop {
+        background: rgba(2, 6, 23, 0.82);
+        backdrop-filter: blur(6px);
+      }
+    </style>
+  </head>
+  <body class="bg-slate-950 text-slate-100 antialiased">
+    <div id="root"></div>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+      const { useState, useEffect, useMemo, useRef } = React;
+
+      // ==========================================
+      // CONSTANTES & UTILS MÓDULO 1 (FINANCEIRO)
+      // ==========================================
+      const BASE_SALARY = 1300;
+      const KM_THRESHOLD = 16000;
+      const RATE_STANDARD = 0.11;
+      const RATE_BONUS = 0.12;
+      const WEEKEND_BONUS_VALUE = 100;
+      const SHIFTS_STORAGE_KEY = 'truckflow_shifts_v1';
+      const SETTINGS_STORAGE_KEY = 'truckflow_settings_v1';
+
+      function calculateMonthlySalary(shifts = [], options = {}) {
+        const { retroactiveBonus = true, extraWeekends = 0 } = options;
+        let totalKm = 0;
+        let shiftWeekendsCount = 0;
+
+        for (const shift of shifts) {
+          const kmInicial = Number(shift.kmInicial) || 0;
+          const kmFinal = Number(shift.kmFinal) || 0;
+          const distance =
+            typeof shift.distanceKm === 'number'
+              ? Math.max(0, shift.distanceKm)
+              : Math.max(0, kmFinal - kmInicial);
+          totalKm += distance;
+          if (shift.weekendOut) shiftWeekendsCount += 1;
+        }
+
+        const safeExtraWeekends = Math.max(0, Number(extraWeekends) || 0);
+        const weekendsCount = shiftWeekendsCount + safeExtraWeekends;
+        const thresholdReached = totalKm > KM_THRESHOLD;
+        const activeRate = thresholdReached ? RATE_BONUS : RATE_STANDARD;
+
+        let kmEarnings = 0;
+        if (!thresholdReached) {
+          kmEarnings = totalKm * RATE_STANDARD;
+        } else if (retroactiveBonus) {
+          kmEarnings = totalKm * RATE_BONUS;
+        } else {
+          kmEarnings =
+            KM_THRESHOLD * RATE_STANDARD +
+            (totalKm - KM_THRESHOLD) * RATE_BONUS;
+        }
+
+        kmEarnings = Math.round(kmEarnings * 100) / 100;
+        const weekendEarnings = weekendsCount * WEEKEND_BONUS_VALUE;
+        const estimatedSalary =
+          Math.round((BASE_SALARY + kmEarnings + weekendEarnings) * 100) / 100;
+
+        const remainingKmForGoal = Math.max(0, KM_THRESHOLD - totalKm);
+        const kmAboveGoal = Math.max(0, totalKm - KM_THRESHOLD);
+        const progressPercentage = Math.min(100, (totalKm / KM_THRESHOLD) * 100);
+        const retroactiveJumpValue =
+          Math.round(KM_THRESHOLD * (RATE_BONUS - RATE_STANDARD) * 100) / 100;
+
+        const tieredKmEarnings = thresholdReached
+          ? Math.round(
+              (KM_THRESHOLD * RATE_STANDARD +
+                (totalKm - KM_THRESHOLD) * RATE_BONUS) *
+                100
+            ) / 100
+          : kmEarnings;
+        const fullRetroKmEarnings = thresholdReached
+          ? Math.round(totalKm * RATE_BONUS * 100) / 100
+          : kmEarnings;
+        const retroactiveDelta =
+          Math.round((fullRetroKmEarnings - tieredKmEarnings) * 100) / 100;
+
+        return {
+          baseSalary: BASE_SALARY,
+          totalKm,
+          weekendsCount,
+          threshold: KM_THRESHOLD,
+          thresholdReached,
+          activeRate,
+          retroactiveBonus,
+          kmEarnings,
+          weekendEarnings,
+          estimatedSalary,
+          remainingKmForGoal,
+          kmAboveGoal,
+          progressPercentage,
+          retroactiveJumpValue,
+          retroactiveDelta,
+        };
+      }
+
+      const formatEuro = (v) =>
+        new Intl.NumberFormat('pt-PT', {
+          style: 'currency',
+          currency: 'EUR',
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(Number(v) || 0);
+
+      const formatKm = (v) =>
+        new Intl.NumberFormat('pt-PT').format(Math.round(Number(v) || 0));
+
+      const formatRate = (r) => `${Number(r).toFixed(2).replace('.', ',')} €`;
+
+      const getMonthKey = (input = new Date()) => {
+        if (typeof input === 'string' && input.length >= 7) return input.slice(0, 7);
+        const d = input instanceof Date ? input : new Date(input);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      };
+
+      const getLocalDateISO = (date = new Date()) =>
+        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+          date.getDate()
+        ).padStart(2, '0')}`;
+
+      const getLocalDateTimeValue = () => {
+        const now = new Date();
+        return `${getLocalDateISO(now)}T${String(now.getHours()).padStart(
+          2,
+          '0'
+        )}:${String(now.getMinutes()).padStart(2, '0')}`;
+      };
+
+      const formatMonthLabel = (monthKey) => {
+        const [y, m] = monthKey.split('-').map(Number);
+        const label = new Intl.DateTimeFormat('pt-PT', {
+          month: 'long',
+          year: 'numeric',
+        }).format(new Date(y, m - 1, 1));
+        return label.charAt(0).toUpperCase() + label.slice(1);
+      };
+
+      const shiftMonthKey = (monthKey, delta) => {
+        const [y, m] = monthKey.split('-').map(Number);
+        return getMonthKey(new Date(y, m - 1 + delta, 1));
+      };
+
+      const formatShiftDate = (dateStr) => {
+        if (!dateStr) return '--';
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return new Intl.DateTimeFormat('pt-PT', {
+          weekday: 'short',
+          day: '2-digit',
+          month: 'short',
+        }).format(new Date(y, m - 1, d));
+      };
+
+      // ==========================================
+      // CONSTANTES & UTILS MÓDULO 2 (TACÓGRAFO)
+      // ==========================================
+      const CONTINUOUS_LIMIT_SEC = 4.5 * 3600;
+      const ALERT_30M_LEFT_SEC = 4 * 3600;
+      const ALERT_15M_LEFT_SEC = 4.25 * 3600;
+      const BREAK_FULL_SEC = 45 * 60;
+      const BREAK_SPLIT_1_SEC = 15 * 60;
+      const BREAK_SPLIT_2_SEC = 30 * 60;
+      const DAILY_LIMIT_9H_SEC = 9 * 3600;
+      const DAILY_LIMIT_10H_SEC = 10 * 3600;
+      const TACHO_STORAGE_KEY = 'truckflow_tacho_v1';
+
+      function getCurrentMondayISO(now = new Date()) {
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const day = d.getDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        d.setDate(d.getDate() + diff);
+        return getLocalDateISO(d);
+      }
+
+      function createInitialTachoState() {
+        return {
+          status: 'idle',
+          lastUpdatedAt: Date.now(),
+          continuousDriveSeconds: 0,
+          dailyDriveSeconds: 0,
+          dailyExtendedTo10h: false,
+          currentBreakSeconds: 0,
+          firstSplitBreakDone: false,
+          dailyRestSeconds: 0,
+          dailyRestTargetHours: 11,
+          weekMondayISO: getCurrentMondayISO(),
+          weekly10hExtensionsUsed: 0,
+          weeklyReducedRestsUsed: 0,
+          soundEnabled: true,
+          alertsFired: { min30: false, min15: false, limit430: false, breakDone: false },
+          lastNotice: '',
+          history: [],
+        };
+      }
+
+      const formatHMS = (sec) => {
+        const s = Math.max(0, Math.floor(sec));
+        return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(
+          Math.floor((s % 3600) / 60)
+        ).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+      };
+
+      const formatHM = (sec) => {
+        const s = Math.max(0, Math.floor(sec));
+        return `${String(Math.floor(s / 3600)).padStart(2, '0')}h ${String(
+          Math.floor((s % 3600) / 60)
+        ).padStart(2, '0')}m`;
+      };
+
+      function playCabinAlert(level = 'warn30') {
+        try {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (!AudioCtx) return;
+          const ctx = new AudioCtx();
+          const patterns = {
+            warn30: [{ f: 740, d: 0.22, t: 0 }],
+            warn15: [{ f: 880, d: 0.2, t: 0 }, { f: 880, d: 0.25, t: 0.28 }],
+            limit430: [{ f: 987, d: 0.22, t: 0 }, { f: 784, d: 0.22, t: 0.26 }, { f: 987, d: 0.35, t: 0.52 }],
+            breakDone: [{ f: 523, d: 0.16, t: 0 }, { f: 659, d: 0.16, t: 0.18 }, { f: 784, d: 0.28, t: 0.36 }],
+          };
+          const base = ctx.currentTime;
+          (patterns[level] || patterns.warn30).forEach(({ f, d, t }) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(f, base + t);
+            gain.gain.setValueAtTime(0.001, base + t);
+            gain.gain.exponentialRampToValueAtTime(0.28, base + t + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, base + t + d);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(base + t);
+            osc.stop(base + t + d + 0.02);
+          });
+          setTimeout(() => ctx.close().catch(() => {}), 1500);
+        } catch {}
+      }
+
+      // ==========================================
+      // UTILS MÓDULO 4 (SCANNER CMR + PDF)
+      // ==========================================
+      function buildCmrFileName(dateStr, loadNumber) {
+        const safeDate = /^\d{4}-\d{2}-\d{2}$/.test(dateStr || '')
+          ? dateStr
+          : getLocalDateISO();
+        const cleaned = String(loadNumber || 'SEM_CARGA')
+          .trim()
+          .replace(/[^a-zA-Z0-9_-]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+        return `CMR_${safeDate}_${cleaned || 'SEM_CARGA'}.pdf`;
+      }
+
+      // ==========================================
+      // ÍCONES SVG
+      // ==========================================
+      const Icon = ({ className = 'h-5 w-5', children }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+          {children}
+        </svg>
+      );
+      const TruckIcon = ({ className }) => (
+        <Icon className={className}><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" /><path d="M15 18H9" /><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14" /><circle cx="17" cy="18" r="2" /><circle cx="7" cy="18" r="2" /></Icon>
+      );
+      const WalletIcon = ({ className }) => (
+        <Icon className={className}><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" /><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" /></Icon>
+      );
+      const TimerIcon = ({ className }) => (
+        <Icon className={className}><line x1="10" x2="14" y1="2" y2="2" /><line x1="12" x2="15" y1="14" y2="11" /><circle cx="12" cy="14" r="8" /></Icon>
+      );
+      const ContainerIcon = ({ className }) => (
+        <Icon className={className}><path d="M22 7.7c0-.6-.4-1.2-.8-1.5l-6.3-3.9a1.72 1.72 0 0 0-1.7 0l-10.3 6c-.5.2-.9.8-.9 1.4v6.6c0 .5.4 1.2.8 1.5l6.3 3.9a1.72 1.72 0 0 0 1.7 0l10.3-6c.5-.3.9-1 .9-1.5Z" /><path d="M10 21.9V14L2.1 9.1" /><path d="m10 14 11.9-6.9" /></Icon>
+      );
+      const ScanIcon = ({ className }) => (
+        <Icon className={className}><path d="M20 10V7l-5-5H6a2 2 0 0 0-2 2v6" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" /><path d="M2 12h20" /></Icon>
+      );
+
+      // ==========================================
+      // MODAL TURNO (MÓDULO 1)
+      // ==========================================
+      function ShiftModal({ isOpen, onClose, onSave, editingShift, suggestedStartKm, monthShifts, retroactiveBonus, extraWeekends, initialEntryMode = 'odometer', defaultDate }) {
+        const dialogRef = useRef(null);
+        const [entryMode, setEntryMode] = useState(initialEntryMode);
+        const [date, setDate] = useState(defaultDate || getLocalDateISO());
+        const [kmInicial, setKmInicial] = useState('');
+        const [kmFinal, setKmFinal] = useState('');
+        const [directKm, setDirectKm] = useState('');
+        const [currentOdometer, setCurrentOdometer] = useState('');
+        const [weekendOut, setWeekendOut] = useState(false);
+        const [notes, setNotes] = useState('');
+        const [error, setError] = useState('');
+
+        useEffect(() => {
+          if (!isOpen) return;
+          setError('');
+          const isDirectEdit = Boolean(editingShift?.id?.startsWith('initial_km_')) || initialEntryMode === 'direct';
+          setEntryMode(editingShift ? (editingShift.id?.startsWith('initial_km_') ? 'direct' : initialEntryMode) : initialEntryMode);
+          if (editingShift) {
+            const dist = typeof editingShift.distanceKm === 'number' ? editingShift.distanceKm : Math.max(0, (Number(editingShift.kmFinal) || 0) - (Number(editingShift.kmInicial) || 0));
+            setDate(editingShift.date || defaultDate || getLocalDateISO());
+            setKmInicial(String(editingShift.kmInicial ?? ''));
+            setKmFinal(String(editingShift.kmFinal ?? ''));
+            setDirectKm(dist > 0 ? String(dist) : '');
+            setCurrentOdometer(isDirectEdit && Number(editingShift.kmInicial) > 0 ? String(editingShift.kmFinal) : '');
+            setWeekendOut(Boolean(editingShift.weekendOut));
+            setNotes(editingShift.notes || '');
+          } else {
+            setDate(defaultDate || getLocalDateISO());
+            setKmInicial(suggestedStartKm != null ? String(suggestedStartKm) : '');
+            setKmFinal('');
+            setDirectKm('');
+            setCurrentOdometer('');
+            setWeekendOut(false);
+            setNotes('');
+          }
+        }, [isOpen, editingShift, suggestedStartKm, initialEntryMode, defaultDate]);
+
+        useEffect(() => {
+          const dialog = dialogRef.current;
+          if (!dialog) return;
+          if (isOpen && !dialog.open) dialog.showModal();
+          else if (!isOpen && dialog.open) dialog.close();
+        }, [isOpen]);
+
+        const parsedStart = Number(kmInicial);
+        const parsedEnd = Number(kmFinal);
+        const parsedDirect = Number(directKm);
+        const parsedOdo = Number(currentOdometer);
+        const range = useMemo(() => {
+          if (entryMode === 'direct') {
+            if (directKm === '' || !(parsedDirect > 0)) return { valid: false, start: 0, end: 0, dist: 0 };
+            if (currentOdometer !== '' && parsedOdo >= parsedDirect) return { valid: true, start: parsedOdo - parsedDirect, end: parsedOdo, dist: parsedDirect };
+            return { valid: true, start: 0, end: parsedDirect, dist: parsedDirect };
+          }
+          const ok = kmInicial !== '' && kmFinal !== '' && parsedStart >= 0 && parsedEnd > parsedStart;
+          return { valid: ok, start: ok ? parsedStart : 0, end: ok ? parsedEnd : 0, dist: ok ? parsedEnd - parsedStart : 0 };
+        }, [entryMode, directKm, parsedDirect, currentOdometer, parsedOdo, kmInicial, kmFinal, parsedStart, parsedEnd]);
+
+        const impactPreview = useMemo(() => {
+          const targetId = editingShift?.id || (entryMode === 'direct' ? `initial_km_${getMonthKey(date)}` : null);
+          const base = targetId ? monthShifts.filter((s) => s.id !== targetId) : monthShifts;
+          const before = calculateMonthlySalary(base, { retroactiveBonus, extraWeekends });
+          if (!range.valid && !weekendOut) return null;
+          const after = calculateMonthlySalary(
+            [...base, { id: targetId || 'p', date, kmInicial: range.start, kmFinal: range.end, distanceKm: range.dist, weekendOut }],
+            { retroactiveBonus, extraWeekends }
+          );
+          return {
+            salaryDelta: Math.round((after.estimatedSalary - before.estimatedSalary) * 100) / 100,
+            crossesThreshold: !before.thresholdReached && after.thresholdReached,
+            afterTotalKm: after.totalKm,
+          };
+        }, [editingShift, entryMode, monthShifts, retroactiveBonus, extraWeekends, range, weekendOut, date]);
+
+        const handleSubmit = (e) => {
+          e.preventDefault();
+          if (entryMode === 'direct') {
+            if (!range.valid) return setError('Informe quantos KM já rodou no mês.');
+            if (currentOdometer !== '' && parsedOdo < parsedDirect) return setError('Odômetro atual não pode ser menor que os KM rodados.');
+          } else if (!range.valid) {
+            return setError('KM Final deve ser maior que o KM Inicial.');
+          }
+          const finalId = editingShift?.id || (entryMode === 'direct' ? `initial_km_${getMonthKey(date)}` : undefined);
+          const finalNotes = entryMode === 'direct' ? notes.trim() || 'KM já rodados no mês (Saldo Inicial)' : notes;
+          onSave({ id: finalId, date, kmInicial: range.start, kmFinal: range.end, weekendOut, notes: finalNotes });
+          onClose();
+        };
+
+        return (
+          <dialog ref={dialogRef} onCancel={(e) => { e.preventDefault(); onClose(); }} onClick={(e) => { if (e.target === dialogRef.current) onClose(); }} className="cab-dialog">
+            <div className="max-h-[92dvh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 text-slate-100 shadow-2xl">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-bold">{entryMode === 'direct' ? 'KM Já Rodados no Mês' : editingShift ? 'Editar Turno / KM' : 'Registrar Turno / KM'}</h2>
+                <button type="button" onClick={onClose} className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl bg-slate-800 text-slate-300">✕</button>
+              </div>
+              <div className="mb-4 grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-1.5">
+                <button type="button" onClick={() => { setEntryMode('odometer'); setError(''); }} className={`min-h-[44px] rounded-xl text-xs font-extrabold ${entryMode === 'odometer' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'}`}>Por Odômetro</button>
+                <button type="button" onClick={() => { setEntryMode('direct'); setError(''); }} className={`min-h-[44px] rounded-xl text-xs font-extrabold ${entryMode === 'direct' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400'}`}>KM Já Rodados (Direto)</button>
+              </div>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-bold uppercase text-slate-400">Data</span>
+                  <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="min-h-[52px] w-full rounded-xl border border-slate-700 bg-slate-950 px-4 text-base font-semibold text-slate-100" />
+                </label>
+                {entryMode === 'direct' ? (
+                  <div className="space-y-3">
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-bold uppercase text-emerald-400">Quantos KM já rodou neste mês?</span>
+                      <input type="number" inputMode="numeric" required min="1" value={directKm} onChange={(e) => setDirectKm(e.target.value)} placeholder="8500" className="tabular-nums min-h-[56px] w-full rounded-xl border border-emerald-500/50 bg-slate-950 px-4 text-xl font-black text-emerald-300" />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-bold uppercase text-slate-400">Odômetro atual do caminhão (Opcional)</span>
+                      <input type="number" inputMode="numeric" min="0" value={currentOdometer} onChange={(e) => setCurrentOdometer(e.target.value)} placeholder="450000" className="tabular-nums min-h-[52px] w-full rounded-xl border border-slate-700 bg-slate-950 px-4 text-base font-bold text-slate-100" />
+                    </label>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-bold uppercase text-slate-400">KM Inicial</span>
+                        <input type="number" inputMode="numeric" required value={kmInicial} onChange={(e) => setKmInicial(e.target.value)} placeholder="412500" className="tabular-nums min-h-[54px] w-full rounded-xl border border-slate-700 bg-slate-950 px-4 text-lg font-bold text-slate-100" />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-bold uppercase text-slate-400">KM Final</span>
+                        <input type="number" inputMode="numeric" required value={kmFinal} onChange={(e) => setKmFinal(e.target.value)} placeholder="413180" className="tabular-nums min-h-[54px] w-full rounded-xl border border-slate-700 bg-slate-950 px-4 text-lg font-bold text-slate-100" />
+                      </label>
+                    </div>
+                    {kmInicial !== '' && Number(kmInicial) >= 0 && (
+                      <div className="grid grid-cols-3 gap-2">
+                        {[500, 650, 800].map((d) => (
+                          <button key={d} type="button" onClick={() => setKmFinal(String((Number(kmInicial) || 0) + d))} className="tabular-nums min-h-[48px] rounded-xl border border-slate-700 bg-slate-800 text-sm font-bold text-slate-200 hover:border-amber-500">+{d} km</button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+                <label className="block">
+                  <span className="mb-1 block text-xs font-bold uppercase text-slate-400">Rota / Descrição (Opcional)</span>
+                  <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={entryMode === 'direct' ? 'KM já rodados no mês (Saldo Inicial)' : 'Ex: ES -> FR -> DE'} className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-950 px-4 text-sm text-slate-100" />
+                </label>
+                <button type="button" onClick={() => setWeekendOut((p) => !p)} className={`flex min-h-[58px] w-full items-center justify-between rounded-xl border px-4 py-3 text-left ${weekendOut ? 'border-emerald-500 bg-emerald-500/15 text-emerald-100' : 'border-slate-700 bg-slate-950 text-slate-300'}`}>
+                  <div><p className="text-sm font-bold">Fim de Semana Passado Fora</p><p className="text-xs text-slate-400">Adiciona +100,00 € ao mês</p></div>
+                  <span className="text-lg font-black">{weekendOut ? '✓' : '○'}</span>
+                </button>
+                {impactPreview && (
+                  <div className="rounded-xl border border-slate-700 bg-slate-950 p-3.5 text-sm">
+                    <div className="flex justify-between"><span className="text-slate-400">Distância:</span><span className="tabular-nums font-bold">{formatKm(range.dist)} km</span></div>
+                    <div className="mt-1 flex justify-between"><span className="text-slate-400">Impacto no Salário:</span><span className="tabular-nums font-extrabold text-emerald-400">+{formatEuro(impactPreview.salaryDelta)}</span></div>
+                    {impactPreview.crossesThreshold && <p className="mt-2 rounded-lg bg-emerald-500/15 p-2 text-xs font-bold text-emerald-300">Meta de 16.000 km ultrapassada ({formatKm(impactPreview.afterTotalKm)} km)! Tarifa sobe para 0,12 €/km!</p>}
+                  </div>
+                )}
+                {error && <p className="rounded-xl border border-rose-500/40 bg-rose-500/15 p-3 text-sm text-rose-200">{error}</p>}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button type="button" onClick={onClose} className="min-h-[52px] rounded-xl border border-slate-700 bg-slate-800 font-bold">Cancelar</button>
+                  <button type="submit" className={`min-h-[52px] rounded-xl font-extrabold text-slate-950 ${entryMode === 'direct' ? 'bg-emerald-500' : 'bg-amber-500'}`}>{entryMode === 'direct' ? 'Guardar KM Iniciais' : 'Guardar Turno'}</button>
+                </div>
+              </form>
+            </div>
+          </dialog>
+        );
+      }
+
+      // ==========================================
+      // MÓDULO 2: TACÓGRAFO (CE 561/2006)
+      // ==========================================
+      function TachographPreview() {
+        const [tacho, setTacho] = useState(() => {
+          try {
+            const raw = JSON.parse(localStorage.getItem(TACHO_STORAGE_KEY) || 'null');
+            const base = { ...createInitialTachoState(), ...(raw || {}) };
+            if (base.weekMondayISO !== getCurrentMondayISO()) {
+              base.weekMondayISO = getCurrentMondayISO();
+              base.weekly10hExtensionsUsed = 0;
+              base.weeklyReducedRestsUsed = 0;
+            }
+            return base;
+          } catch {
+            return createInitialTachoState();
+          }
+        });
+        const [restHours, setRestHours] = useState(11);
+
+        useEffect(() => {
+          localStorage.setItem(TACHO_STORAGE_KEY, JSON.stringify(tacho));
+        }, [tacho]);
+
+        useEffect(() => {
+          if (tacho.status === 'idle') return;
+          const id = setInterval(() => {
+            setTacho((prev) => {
+              const next = { ...prev, alertsFired: { ...prev.alertsFired }, lastUpdatedAt: Date.now() };
+              if (next.status === 'driving') {
+                next.continuousDriveSeconds += 1;
+                next.dailyDriveSeconds += 1;
+                if (next.continuousDriveSeconds >= ALERT_30M_LEFT_SEC && !next.alertsFired.min30) {
+                  next.alertsFired.min30 = true;
+                  if (next.soundEnabled) playCabinAlert('warn30');
+                }
+                if (next.continuousDriveSeconds >= ALERT_15M_LEFT_SEC && !next.alertsFired.min15) {
+                  next.alertsFired.min15 = true;
+                  if (next.soundEnabled) playCabinAlert('warn15');
+                }
+                if (next.continuousDriveSeconds >= CONTINUOUS_LIMIT_SEC && !next.alertsFired.limit430) {
+                  next.alertsFired.limit430 = true;
+                  if (next.soundEnabled) playCabinAlert('limit430');
+                }
+              } else if (next.status === 'break') {
+                next.currentBreakSeconds += 1;
+                const req = next.firstSplitBreakDone ? BREAK_SPLIT_2_SEC : BREAK_FULL_SEC;
+                if (next.currentBreakSeconds >= req && !next.alertsFired.breakDone) {
+                  next.alertsFired.breakDone = true;
+                  next.continuousDriveSeconds = 0;
+                  next.firstSplitBreakDone = false;
+                  next.alertsFired.min30 = false;
+                  next.alertsFired.min15 = false;
+                  next.alertsFired.limit430 = false;
+                  next.lastNotice = 'Pausa concluída! Condução contínua zerada.';
+                  if (next.soundEnabled) playCabinAlert('breakDone');
+                }
+              } else if (next.status === 'resting') {
+                next.dailyRestSeconds += 1;
+              }
+              return next;
+            });
+          }, 1000);
+          return () => clearInterval(id);
+        }, [tacho.status]);
+
+        const remainingContinuous = Math.max(0, CONTINUOUS_LIMIT_SEC - tacho.continuousDriveSeconds);
+        const isWarn30 = tacho.continuousDriveSeconds >= ALERT_30M_LEFT_SEC && tacho.continuousDriveSeconds < ALERT_15M_LEFT_SEC;
+        const isWarn15 = tacho.continuousDriveSeconds >= ALERT_15M_LEFT_SEC && tacho.continuousDriveSeconds < CONTINUOUS_LIMIT_SEC;
+        const isLimit = tacho.continuousDriveSeconds >= CONTINUOUS_LIMIT_SEC;
+        const dailyLimitSec = tacho.dailyExtendedTo10h ? DAILY_LIMIT_10H_SEC : DAILY_LIMIT_9H_SEC;
+
+        return (
+          <div className="space-y-4">
+            {(isWarn30 || isWarn15 || isLimit) && (
+              <div className={`rounded-2xl border p-4 ${isLimit || isWarn15 ? 'border-rose-500 bg-rose-500/20 text-rose-100' : 'border-amber-500 bg-amber-500/15 text-amber-100'}`}>
+                <p className="text-sm font-black">
+                  {isLimit ? 'LIMITE 04:30:00 ATINGIDO — PARE!' : isWarn15 ? 'ALERTA 04:15:00 — 15 MIN RESTANTES!' : 'AVISO 04:00:00 — 30 MIN RESTANTES'}
+                </p>
+              </div>
+            )}
+
+            <section className="rounded-3xl border border-slate-800 bg-slate-900 p-5 text-center shadow-xl">
+              <div className="flex items-center justify-between text-xs font-bold uppercase text-slate-400">
+                <span>{tacho.status === 'driving' ? 'Conduzindo' : tacho.status === 'break' ? 'Em Pausa' : tacho.status === 'resting' ? `Descanso ${tacho.dailyRestTargetHours}h` : 'Em Espera'}</span>
+                <button type="button" onClick={() => setTacho((p) => ({ ...p, soundEnabled: !p.soundEnabled }))} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-1.5 text-slate-200">
+                  {tacho.soundEnabled ? '🔊 Som ON' : '🔇 Mudo'}
+                </button>
+              </div>
+
+              {tacho.status === 'break' ? (
+                <>
+                  <p className="mt-3 text-xs font-bold uppercase text-emerald-300">{tacho.firstSplitBreakDone ? '2.ª Fração (Meta 30:00)' : 'Pausa (Meta 45:00 ou 15:00)'}</p>
+                  <p className="tabular-nums mt-1 text-5xl font-black text-emerald-400">{formatHMS(tacho.currentBreakSeconds)}</p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-3 text-xs font-bold uppercase text-slate-400">Restante Bloco 04:30:00</p>
+                  <p className={`tabular-nums mt-1 text-5xl font-black ${isLimit || isWarn15 ? 'text-rose-400' : isWarn30 ? 'text-amber-400' : 'text-slate-50'}`}>{formatHMS(remainingContinuous)}</p>
+                  <p className="tabular-nums mt-1 text-xs text-slate-400">Conduzido: {formatHMS(tacho.continuousDriveSeconds)}</p>
+                </>
+              )}
+
+              <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                <button type="button" onClick={() => setTacho((p) => {
+                  if (p.status === 'break' && !p.alertsFired.breakDone) {
+                    if (p.currentBreakSeconds >= BREAK_FULL_SEC) return { ...p, status: 'driving', continuousDriveSeconds: 0, firstSplitBreakDone: false, currentBreakSeconds: 0, lastNotice: 'Pausa 45m válida!' };
+                    if (p.firstSplitBreakDone && p.currentBreakSeconds >= BREAK_SPLIT_2_SEC) return { ...p, status: 'driving', continuousDriveSeconds: 0, firstSplitBreakDone: false, currentBreakSeconds: 0, lastNotice: 'Pausa 30m válida!' };
+                    if (!p.firstSplitBreakDone && p.currentBreakSeconds >= BREAK_SPLIT_1_SEC) return { ...p, status: 'driving', firstSplitBreakDone: true, currentBreakSeconds: 0, lastNotice: '1.ª fração 15m registrada! Próxima exige 30m.' };
+                  }
+                  return { ...p, status: 'driving', currentBreakSeconds: 0, alertsFired: { ...p.alertsFired, breakDone: false }, lastNotice: 'Condução iniciada.' };
+                })} className="min-h-[56px] rounded-2xl bg-amber-500 px-3 text-sm font-black text-slate-950">▶ Iniciar Condução</button>
+
+                <button type="button" onClick={() => setTacho((p) => ({ ...p, status: 'break', currentBreakSeconds: 0, alertsFired: { ...p.alertsFired, breakDone: false }, lastNotice: p.firstSplitBreakDone ? 'Pausa iniciada (exige 30 min).' : 'Pausa iniciada (45m ou 15m).' }))} className="min-h-[56px] rounded-2xl border border-emerald-500/40 bg-emerald-500/15 px-3 text-sm font-black text-emerald-300">☕ Iniciar Pausa</button>
+
+                <button type="button" onClick={() => setTacho((p) => ({
+                  ...p,
+                  status: 'resting',
+                  continuousDriveSeconds: 0,
+                  dailyDriveSeconds: 0,
+                  dailyExtendedTo10h: false,
+                  dailyRestSeconds: 0,
+                  dailyRestTargetHours: restHours,
+                  weeklyReducedRestsUsed: restHours === 9 ? Math.min(3, p.weeklyReducedRestsUsed + 1) : p.weeklyReducedRestsUsed,
+                  lastNotice: `Fim de jornada · Descanso ${restHours}h iniciado.`
+                }))} className="min-h-[56px] rounded-2xl border border-sky-500/40 bg-sky-500/15 px-3 text-sm font-black text-sky-300">🌙 Fim de Jornada</button>
+              </div>
+              {tacho.lastNotice && <p className="mt-3 rounded-xl bg-slate-950 p-3 text-xs text-slate-300">{tacho.lastNotice}</p>}
+            </section>
+
+            {/* Pausa rápida 15m / 30m / 45m */}
+            <section className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+              <div className="mb-2 flex justify-between text-xs font-bold">
+                <span>Pausa Fracionada (15m + 30m) ou 45m</span>
+                {tacho.firstSplitBreakDone && <span className="text-emerald-400">✓ 15m feito (falta 30m)</span>}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <button type="button" onClick={() => setTacho((p) => ({ ...p, status: 'idle', firstSplitBreakDone: true, lastNotice: '1.ª fração de 15 min validada! Falta 30 min.' }))} className="min-h-[48px] rounded-xl border border-slate-700 bg-slate-950 text-xs font-bold">15 min (1.ª)</button>
+                <button type="button" onClick={() => setTacho((p) => p.firstSplitBreakDone ? { ...p, status: 'idle', continuousDriveSeconds: 0, firstSplitBreakDone: false, alertsFired: { min30: false, min15: false, limit430: false, breakDone: false }, lastNotice: '2.ª fração 30 min validada! Zerado.' } : { ...p, lastNotice: 'Faça 15 min primeiro ou 45 min direto.' })} className="min-h-[48px] rounded-xl border border-slate-700 bg-slate-950 text-xs font-bold">30 min (2.ª)</button>
+                <button type="button" onClick={() => setTacho((p) => ({ ...p, status: 'idle', continuousDriveSeconds: 0, firstSplitBreakDone: false, alertsFired: { min30: false, min15: false, limit430: false, breakDone: false }, lastNotice: 'Pausa completa de 45 min! Zerado.' }))} className="min-h-[48px] rounded-xl border border-emerald-500/40 bg-emerald-500/15 text-xs font-bold text-emerald-300">45 min (Full)</button>
+              </div>
+            </section>
+
+            {/* Diária + Reduzido + Simulação */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+                <div className="flex justify-between text-xs font-bold text-slate-400">
+                  <span>Diária ({tacho.dailyExtendedTo10h ? '10h' : '9h'})</span>
+                  <span className="text-amber-300">Ext 10h: {tacho.weekly10hExtensionsUsed}/2</span>
+                </div>
+                <p className="tabular-nums mt-1 text-xl font-black">{formatHM(tacho.dailyDriveSeconds)} / {formatHM(dailyLimitSec)}</p>
+                <button type="button" onClick={() => setTacho((p) => {
+                  if (p.dailyExtendedTo10h) return { ...p, dailyExtendedTo10h: false, weekly10hExtensionsUsed: Math.max(0, p.weekly10hExtensionsUsed - 1) };
+                  if (p.weekly10hExtensionsUsed >= 2) return { ...p, lastNotice: 'Máximo de 2 extensões de 10h na semana atingido.' };
+                  return { ...p, dailyExtendedTo10h: true, weekly10hExtensionsUsed: p.weekly10hExtensionsUsed + 1 };
+                })} className="mt-3 min-h-[46px] w-full rounded-xl border border-slate-700 bg-slate-950 text-xs font-bold">
+                  {tacho.dailyExtendedTo10h ? 'Reverter 10h' : 'Ativar Extensão 10h'}
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+                <div className="flex justify-between text-xs font-bold text-slate-400">
+                  <span>Descanso Reduzido 9h</span>
+                  <span className="text-sky-300">Semana: {tacho.weeklyReducedRestsUsed}/3</span>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setRestHours(11)} className={`min-h-[46px] rounded-xl border text-xs font-bold ${restHours === 11 ? 'border-sky-500 bg-sky-500/20 text-sky-200' : 'border-slate-700 bg-slate-950'}`}>11h Regular</button>
+                  <button type="button" onClick={() => setRestHours(9)} className={`min-h-[46px] rounded-xl border text-xs font-bold ${restHours === 9 ? 'border-amber-500 bg-amber-500/20 text-amber-200' : 'border-slate-700 bg-slate-950'}`}>9h Reduzido</button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-800 bg-slate-900 p-3">
+              <button type="button" onClick={() => { playCabinAlert('warn30'); setTacho((p) => ({ ...p, status: 'driving', continuousDriveSeconds: ALERT_30M_LEFT_SEC, alertsFired: { ...p.alertsFired, min30: true } })); }} className="min-h-[44px] rounded-xl bg-amber-500/15 text-xs font-bold text-amber-300">Testar 04:00</button>
+              <button type="button" onClick={() => { playCabinAlert('warn15'); setTacho((p) => ({ ...p, status: 'driving', continuousDriveSeconds: ALERT_15M_LEFT_SEC, alertsFired: { ...p.alertsFired, min30: true, min15: true } })); }} className="min-h-[44px] rounded-xl bg-rose-500/15 text-xs font-bold text-rose-300">Testar 04:15</button>
+              <button type="button" onClick={() => setTacho(createInitialTachoState())} className="min-h-[44px] rounded-xl bg-slate-800 text-xs font-bold text-slate-300">Zerar Tudo</button>
+            </div>
+          </div>
+        );
+      }
+
+      // ==========================================
+      // MÓDULO 3: CHECKLIST DE REBOQUE
+      // ==========================================
+      function TrailerPreview() {
+        const [records, setRecords] = useState(() => {
+          try { return JSON.parse(localStorage.getItem('truckflow_trailers_v1') || '[]'); } catch { return []; }
+        });
+        const [actionType, setActionType] = useState('couple');
+        const [plate, setPlate] = useState('');
+        const [country, setCountry] = useState('ES');
+        const [location, setLocation] = useState('');
+        const [dateTime, setDateTime] = useState(getLocalDateTimeValue);
+        const [sealNumber, setSealNumber] = useState('');
+        const [sealPhotoDataUrl, setSealPhotoDataUrl] = useState('');
+        const [checks, setChecks] = useState({ a: false, b: false, c: false, d: false });
+        const [err, setErr] = useState('');
+
+        useEffect(() => {
+          localStorage.setItem('truckflow_trailers_v1', JSON.stringify(records));
+        }, [records]);
+
+        const allOk = checks.a && checks.b && checks.c && checks.d;
+
+        const handlePhoto = (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => setSealPhotoDataUrl(String(reader.result));
+          reader.readAsDataURL(file);
+        };
+
+        const handleSave = (e) => {
+          e.preventDefault();
+          if (!plate.trim()) return setErr('Informe a matrícula do reboque.');
+          if (!allOk) return setErr('Marque todos os 4 itens obrigatórios.');
+          if (actionType === 'couple' && !sealNumber.trim()) return setErr('Informe o número do selo.');
+          setErr('');
+          setRecords((prev) => [{ id: `trl_${Date.now()}`, actionType, plate: plate.toUpperCase(), country, location, dateTime, sealNumber: sealNumber.toUpperCase(), sealPhotoDataUrl }, ...prev]);
+          setPlate(''); setLocation(''); setSealNumber(''); setSealPhotoDataUrl('');
+          setChecks({ a: false, b: false, c: false, d: false });
+        };
+
+        return (
+          <div className="space-y-4">
+            <form onSubmit={handleSave} className="space-y-3 rounded-3xl border border-slate-800 bg-slate-900 p-5">
+              <h2 className="text-lg font-extrabold">Checklist Rápido de Reboque</h2>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setActionType('couple')} className={`min-h-[48px] rounded-xl border text-sm font-bold ${actionType === 'couple' ? 'border-amber-500 bg-amber-500/20 text-amber-300' : 'border-slate-700 bg-slate-950'}`}>Engate</button>
+                <button type="button" onClick={() => setActionType('uncouple')} className={`min-h-[48px] rounded-xl border text-sm font-bold ${actionType === 'uncouple' ? 'border-sky-500 bg-sky-500/20 text-sky-300' : 'border-slate-700 bg-slate-950'}`}>Desengate</button>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <input type="text" required value={plate} onChange={(e) => setPlate(e.target.value.toUpperCase())} placeholder="Matrícula (ex: L-1234-BBB)" className="min-h-[50px] rounded-xl border border-slate-700 bg-slate-950 px-4 font-black uppercase" />
+                <input type="datetime-local" value={dateTime} onChange={(e) => setDateTime(e.target.value)} className="min-h-[50px] rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm" />
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {['PT', 'ES', 'FR', 'DE', 'BE', 'NL', 'IT'].map((c) => (
+                  <button key={c} type="button" onClick={() => setCountry(c)} className={`min-h-[38px] rounded-xl border px-3 text-xs font-extrabold ${country === c ? 'border-amber-500 bg-amber-500 text-slate-950' : 'border-slate-700 bg-slate-950'}`}>{c}</button>
+                ))}
+              </div>
+              <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Local / Cidade" className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-950 px-4 text-sm" />
+              {[
+                ['a', '1. Quinta-roda travada e verificada visualmente'],
+                ['b', '2. Mangueiras de ar (vermelha/amarela) e cabos ABS'],
+                ['c', '3. Cabo TIR passado e íntegro'],
+                ['d', '4. Lacre / Selo conferido'],
+              ].map(([k, txt]) => (
+                <button key={k} type="button" onClick={() => setChecks((p) => ({ ...p, [k]: !p[k] }))} className={`flex min-h-[54px] w-full items-center justify-between rounded-xl border px-4 text-left text-sm font-bold ${checks[k] ? 'border-emerald-500 bg-emerald-500/15 text-emerald-100' : 'border-slate-700 bg-slate-950 text-slate-300'}`}>
+                  <span>{txt}</span><span>{checks[k] ? '✓' : '○'}</span>
+                </button>
+              ))}
+              <input type="text" value={sealNumber} onChange={(e) => setSealNumber(e.target.value.toUpperCase())} placeholder="Número do Selo (ex: SEAL-88412)" className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-950 px-4 font-bold uppercase" />
+              <label className="flex min-h-[48px] cursor-pointer items-center justify-center rounded-xl border border-sky-500/40 bg-sky-500/15 text-sm font-bold text-sky-300">
+                📷 Foto Rápida do Selo
+                <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" />
+              </label>
+              {sealPhotoDataUrl && <img src={sealPhotoDataUrl} alt="Selo" className="h-20 rounded-xl border border-slate-700 object-cover" />}
+              {err && <p className="rounded-xl bg-rose-500/15 p-3 text-xs font-bold text-rose-300">{err}</p>}
+              <button type="submit" disabled={!allOk} className={`min-h-[54px] w-full rounded-2xl font-black ${allOk ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-500'}`}>Salvar Checklist</button>
+            </form>
+
+            {records.map((r) => (
+              <div key={r.id} className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 p-4">
+                <div>
+                  <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[11px] font-bold text-amber-300">{r.actionType === 'couple' ? 'Engate' : 'Desengate'}</span>
+                  <span className="ml-2 font-black">{r.plate} ({r.country})</span>
+                  <p className="text-xs text-slate-400">{r.dateTime} · Selo: {r.sealNumber || '--'}</p>
+                </div>
+                <button type="button" onClick={() => setRecords((p) => p.filter((x) => x.id !== r.id))} className="min-h-[44px] rounded-xl bg-rose-500/10 px-3 text-xs font-bold text-rose-300">Apagar</button>
+              </div>
+            ))}
+          </div>
+        );
+      }
+
+      // ==========================================
+      // MÓDULO 4: SCANNER CMR & WHATSAPP
+      // ==========================================
+      function CmrPreview() {
+        const [loadNumber, setLoadNumber] = useState('84920');
+        const [date, setDate] = useState(getLocalDateISO);
+        const [scanDataUrl, setScanDataUrl] = useState('');
+        const [sizeKb, setSizeKb] = useState(0);
+        const [msg, setMsg] = useState('');
+
+        const processToBw = (src) => {
+          const img = new Image();
+          img.onload = () => {
+            const MAX = 1400;
+            let w = img.width, h = img.height;
+            if (w > h && w > MAX) { h = Math.round((h * MAX) / w); w = MAX; }
+            else if (h >= w && h > MAX) { w = Math.round((w * MAX) / h); h = MAX; }
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            const imgData = ctx.getImageData(0, 0, w, h);
+            const d = imgData.data;
+            for (let i = 0; i < d.length; i += 4) {
+              const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+              let v = (lum - 128) * 1.85 + 128;
+              if (v > 212) v = 255; else if (v < 40) v = 0;
+              d[i] = d[i + 1] = d[i + 2] = v;
+            }
+            ctx.putImageData(imgData, 0, 0);
+            const out = canvas.toDataURL('image/jpeg', 0.72);
+            setScanDataUrl(out);
+            setSizeKb(Math.round((out.length * 0.75) / 1024));
+          };
+          img.src = src;
+        };
+
+        const createDemoCmr = () => {
+          const c = document.createElement('canvas');
+          c.width = 900; c.height = 1250;
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#edeae2'; ctx.fillRect(0, 0, 900, 1250);
+          ctx.strokeStyle = '#111827'; ctx.lineWidth = 4; ctx.strokeRect(40, 40, 820, 1170);
+          ctx.fillStyle = '#0f172a'; ctx.font = 'bold 30px sans-serif';
+          ctx.fillText('CMR - CARTA DE PORTE INTERNACIONAL', 70, 100);
+          ctx.font = 'bold 22px monospace';
+          ctx.fillText(`CARGA Nº: ${loadNumber || '84920'} | DATA: ${date}`, 70, 145);
+          ctx.strokeRect(60, 180, 780, 950);
+          ctx.font = '22px sans-serif';
+          ctx.fillText('1. REMETENTE: LOGÍSTICA IBÉRICA S.A. (ES)', 85, 240);
+          ctx.fillText('2. DESTINO: EURODISTRIBUTION GMBH (DE)', 85, 290);
+          ctx.fillText('3. REBOQUE: L-1234-BBB · SELO: SEAL-88412', 85, 340);
+          ctx.fillText('4. MERCADORIA: 33 PALETES · 22.450 KG', 85, 390);
+          ctx.strokeStyle = '#1d4ed8'; ctx.strokeRect(480, 920, 310, 110);
+          ctx.fillStyle = '#1d4ed8'; ctx.font = 'bold 22px sans-serif';
+          ctx.fillText('ENTREGUE CONFORME', 505, 975);
+          processToBw(c.toDataURL('image/jpeg', 0.85));
+        };
+
+        const handleFile = (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const r = new FileReader();
+          r.onload = () => processToBw(String(r.result));
+          r.readAsDataURL(file);
+        };
+
+        const handleExportAndShare = async () => {
+          if (!scanDataUrl || !window.jspdf) return;
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+          doc.addImage(scanDataUrl, 'JPEG', 10, 10, 190, 265, undefined, 'FAST');
+          const fileName = buildCmrFileName(date, loadNumber);
+          const blob = doc.output('blob');
+          const file = new File([blob], fileName, { type: 'application/pdf' });
+
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ title: fileName, text: `CMR ${loadNumber}`, files: [file] });
+            setMsg(`Compartilhado via Web Share: ${fileName}`);
+          } else {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = fileName; a.click();
+            setMsg(`PDF ${fileName} (${Math.round(blob.size / 1024)} KB) baixado!`);
+          }
+        };
+
+        return (
+          <div className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900 p-5">
+            <h2 className="text-lg font-extrabold">Scanner de CMR & WhatsApp</h2>
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+              <label className="flex min-h-[56px] cursor-pointer items-center justify-center rounded-2xl bg-amber-500 px-4 font-black text-slate-950 sm:col-span-2">
+                📷 Novo CMR (Câmera)
+                <input type="file" accept="image/*" capture="environment" onChange={handleFile} className="hidden" />
+              </label>
+              <button type="button" onClick={createDemoCmr} className="min-h-[56px] rounded-2xl border border-slate-700 bg-slate-800 text-xs font-extrabold">CMR de Teste</button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <input type="text" value={loadNumber} onChange={(e) => setLoadNumber(e.target.value)} placeholder="Nº Carga" className="min-h-[48px] rounded-xl border border-slate-700 bg-slate-950 px-4 font-bold" />
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="min-h-[48px] rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm" />
+            </div>
+            <p className="rounded-xl bg-slate-950 p-3 text-xs text-amber-300">Arquivo: {buildCmrFileName(date, loadNumber)}</p>
+            {scanDataUrl && (
+              <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950 p-3">
+                <p className="text-xs font-bold text-emerald-400">Scanner P&B aplicado (~{sizeKb} KB)</p>
+                <img src={scanDataUrl} alt="CMR P&B" className="mx-auto max-h-80 rounded-lg" />
+              </div>
+            )}
+            {msg && <p className="rounded-xl bg-emerald-500/15 p-3 text-xs font-bold text-emerald-300">{msg}</p>}
+            <button type="button" disabled={!scanDataUrl} onClick={handleExportAndShare} className={`min-h-[56px] w-full rounded-2xl font-black ${scanDataUrl ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-500'}`}>Gerar PDF e Enviar no WhatsApp</button>
+          </div>
+        );
+      }
+
+      // ==========================================
+      // APP PRINCIPAL
+      // ==========================================
+      function App() {
+        const [activeTab, setActiveTab] = useState('dashboard');
+        const [selectedMonth, setSelectedMonth] = useState(getMonthKey(new Date()));
+        const [shifts, setShifts] = useState(() => {
+          try { return JSON.parse(localStorage.getItem(SHIFTS_STORAGE_KEY) || '[]'); } catch { return []; }
+        });
+        const [settings, setSettings] = useState(() => {
+          try {
+            const p = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}');
+            return { retroactiveBonus: p.retroactiveBonus !== false, extraWeekendsByMonth: p.extraWeekendsByMonth || {} };
+          } catch {
+            return { retroactiveBonus: true, extraWeekendsByMonth: {} };
+          }
+        });
+        const [isModalOpen, setIsModalOpen] = useState(false);
+        const [modalEntryMode, setModalEntryMode] = useState('odometer');
+        const [editingShift, setEditingShift] = useState(null);
+
+        useEffect(() => localStorage.setItem(SHIFTS_STORAGE_KEY, JSON.stringify(shifts)), [shifts]);
+        useEffect(() => localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings)), [settings]);
+
+        const monthShifts = useMemo(() => shifts.filter((s) => getMonthKey(s.date) === selectedMonth), [shifts, selectedMonth]);
+        const extraWeekends = settings.extraWeekendsByMonth?.[selectedMonth] || 0;
+        const retroactiveBonus = settings.retroactiveBonus !== false;
+        const stats = useMemo(() => calculateMonthlySalary(monthShifts, { retroactiveBonus, extraWeekends }), [monthShifts, retroactiveBonus, extraWeekends]);
+        const existingInitialShift = useMemo(() => monthShifts.find((s) => s.id === `initial_km_${selectedMonth}`) || null, [monthShifts, selectedMonth]);
+        const suggestedStartKm = useMemo(() => {
+          const odo = monthShifts.find((s) => !(s.id?.startsWith('initial_km_') && Number(s.kmInicial) === 0)) || shifts.find((s) => !(s.id?.startsWith('initial_km_') && Number(s.kmInicial) === 0));
+          return odo ? odo.kmFinal : null;
+        }, [monthShifts, shifts]);
+
+        const handleSaveShift = (shiftData) => {
+          const id = shiftData.id || `shift_${Date.now()}`;
+          const normalized = { ...shiftData, id, distanceKm: Math.max(0, Number(shiftData.kmFinal) - Number(shiftData.kmInicial)) };
+          setShifts((prev) => {
+            const exists = prev.some((s) => s.id === id);
+            const next = exists ? prev.map((s) => (s.id === id ? normalized : s)) : [normalized, ...prev];
+            return next.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+          });
+        };
+
+        const handleLoadDemo = () => {
+          const routes = [
+            { day: '02', km: 2850, weekendOut: false, notes: 'PT -> ES -> FR' },
+            { day: '06', km: 3420, weekendOut: true, notes: 'FR -> DE' },
+            { day: '11', km: 3180, weekendOut: false, notes: 'DE -> NL -> BE' },
+            { day: '15', km: 3650, weekendOut: true, notes: 'BE -> FR -> ES' },
+            { day: '20', km: 2950, weekendOut: false, notes: 'ES -> IT' },
+          ];
+          let odo = 410000;
+          const generated = routes.map((r, i) => {
+            const kmInicial = odo;
+            const kmFinal = odo + r.km;
+            odo = kmFinal;
+            return { id: `demo_${selectedMonth}_${i}`, date: `${selectedMonth}-${r.day}`, kmInicial, kmFinal, distanceKm: r.km, weekendOut: r.weekendOut, notes: r.notes };
+          });
+          setShifts((prev) => [...generated.reverse(), ...prev.filter((s) => getMonthKey(s.date) !== selectedMonth)]);
+        };
+
+        return (
+          <div className="min-h-dvh bg-slate-950 text-slate-100">
+            <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/95 backdrop-blur-md">
+              <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-500/40 bg-amber-500/15 text-amber-400">
+                    <TruckIcon className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h1 className="text-base font-extrabold">TruckFlow <span className="text-amber-400">EU</span></h1>
+                    <p className="text-xs font-medium text-emerald-400">Módulos 1 a 4 Ativos</p>
+                  </div>
+                </div>
+                <span className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-300">PWA Cabine</span>
+              </div>
+            </header>
+
+            <main className="mx-auto max-w-2xl px-4 pb-28 pt-4">
+              {activeTab === 'dashboard' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 p-2">
+                    <button type="button" onClick={() => setSelectedMonth((m) => shiftMonthKey(m, -1))} className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl bg-slate-800 text-lg font-bold">‹</button>
+                    <span className="text-base font-extrabold">{formatMonthLabel(selectedMonth)}</span>
+                    <button type="button" onClick={() => setSelectedMonth((m) => shiftMonthKey(m, 1))} className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl bg-slate-800 text-lg font-bold">›</button>
+                  </div>
+
+                  <section className={`rounded-3xl border p-5 shadow-xl ${stats.thresholdReached ? 'border-emerald-500/50 bg-gradient-to-br from-slate-900 to-emerald-950/50' : 'border-slate-800 bg-slate-900'}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Salário Estimado do Mês</span>
+                      <span className={`rounded-full border px-3 py-1 text-xs font-extrabold ${stats.thresholdReached ? 'border-emerald-400/50 bg-emerald-500/20 text-emerald-300' : 'border-amber-500/40 bg-amber-500/15 text-amber-300'}`}>
+                        {stats.thresholdReached ? '0,12 €/km ATIVO (> 16.000 km)' : '0,11 €/km (até 16.000 km)'}
+                      </span>
+                    </div>
+                    <p className="tabular-nums mt-2 text-4xl font-black text-emerald-400 sm:text-5xl">{formatEuro(stats.estimatedSalary)}</p>
+
+                    <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3"><span className="text-[11px] font-bold uppercase text-slate-400">Ordenado Base</span><p className="tabular-nums mt-1 text-lg font-extrabold">{formatEuro(BASE_SALARY)}</p></div>
+                      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3"><span className="text-[11px] font-bold uppercase text-slate-400">Quilometragem</span><p className="tabular-nums mt-1 text-lg font-extrabold text-amber-400">{formatEuro(stats.kmEarnings)}</p><span className="tabular-nums text-[11px] text-slate-400">{formatKm(stats.totalKm)} km × {formatRate(stats.activeRate)}</span></div>
+                      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3">
+                        <div className="flex justify-between"><span className="text-[11px] font-bold uppercase text-slate-400">Fins de Semana</span><span className="text-[11px] font-bold">{stats.weekendsCount}×</span></div>
+                        <p className="tabular-nums mt-1 text-lg font-extrabold text-sky-400">{formatEuro(stats.weekendEarnings)}</p>
+                        <div className="mt-1 flex justify-end gap-1">
+                          <button type="button" onClick={() => setSettings((s) => ({ ...s, extraWeekendsByMonth: { ...s.extraWeekendsByMonth, [selectedMonth]: Math.max(0, extraWeekends - 1) } }))} className="h-7 w-7 rounded-lg bg-slate-800 text-xs font-bold">-</button>
+                          <button type="button" onClick={() => setSettings((s) => ({ ...s, extraWeekendsByMonth: { ...s.extraWeekendsByMonth, [selectedMonth]: extraWeekends + 1 } }))} className="h-7 rounded-lg bg-sky-500/20 px-2 text-xs font-bold text-sky-300">+1 FDS</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950 p-3.5">
+                      <div className="mb-2 flex justify-between text-xs font-bold"><span>Meta Gatilho: 16.000 km</span><span className="tabular-nums text-amber-400">{formatKm(stats.totalKm)} / 16.000 km ({Math.round(stats.progressPercentage)}%)</span></div>
+                      <div className="h-4 w-full overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full transition-all ${stats.thresholdReached ? 'bg-emerald-400' : 'bg-amber-400'}`} style={{ width: `${Math.max(stats.totalKm > 0 ? 3 : 0, stats.progressPercentage)}%` }} /></div>
+                      <p className="mt-2 text-xs text-slate-300">{stats.thresholdReached ? `Meta batida (+${formatKm(stats.kmAboveGoal)} km acima)!` : `Faltam ${formatKm(stats.remainingKmForGoal)} km para atingir 16.000 km.`}</p>
+                    </div>
+                  </section>
+
+                  <div className="space-y-2.5">
+                    <button type="button" onClick={() => { setEditingShift(null); setModalEntryMode('odometer'); setIsModalOpen(true); }} className="flex min-h-[58px] w-full items-center justify-center gap-2 rounded-2xl bg-amber-500 text-lg font-black text-slate-950 shadow-lg">+ Registrar Turno / KM</button>
+                    <button type="button" onClick={() => { setEditingShift(existingInitialShift); setModalEntryMode('direct'); setIsModalOpen(true); }} className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 text-sm font-extrabold text-emerald-300">+ {existingInitialShift ? `Editar KM já feitos (${formatKm(existingInitialShift.distanceKm)} km)` : 'Inserir KM já feitos no mês (Saldo Inicial)'}</button>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-4">
+                    <div><p className="text-sm font-bold">Aplicar 0,12€ retroativo a todo o mês</p><p className="text-xs text-slate-400">{retroactiveBonus ? 'Todos os KM passam a 0,12 € ao cruzar 16.000 km' : 'Escalonado: 0,11 € até 16k + 0,12 € no excedente'}</p></div>
+                    <button type="button" onClick={() => setSettings((s) => ({ ...s, retroactiveBonus: !retroactiveBonus }))} className={`min-h-[48px] shrink-0 rounded-xl border px-3 text-xs font-extrabold ${retroactiveBonus ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-300' : 'border-slate-700 bg-slate-800 text-slate-300'}`}>{retroactiveBonus ? 'Retroativo ON' : 'Escalonado'}</button>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-sm font-extrabold uppercase text-slate-300">Turnos ({monthShifts.length})</h2>
+                      {monthShifts.length === 0 && <button type="button" onClick={handleLoadDemo} className="min-h-[40px] rounded-xl border border-slate-700 bg-slate-900 px-3 text-xs font-bold text-amber-400">Simular Mês (16.050 km)</button>}
+                    </div>
+                    {monthShifts.map((s) => {
+                      const dist = Math.max(0, Number(s.kmFinal) - Number(s.kmInicial));
+                      return (
+                        <article key={s.id} className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+                          <div className="flex justify-between gap-2">
+                            <div><span className="font-extrabold capitalize">{formatShiftDate(s.date)}</span>{s.notes && <span className="ml-2 rounded bg-slate-800 px-2 py-0.5 text-xs text-sky-300">{s.notes}</span>}<p className="tabular-nums mt-1 text-xs text-slate-400">{formatKm(s.kmInicial)} → {formatKm(s.kmFinal)} km</p></div>
+                            <div className="text-right"><p className="tabular-nums font-black text-amber-400">+{formatKm(dist)} km</p><p className="tabular-nums text-xs font-bold text-emerald-400">{formatEuro(dist * stats.activeRate)}</p></div>
+                          </div>
+                          <div className="mt-3 flex items-center justify-between border-t border-slate-800 pt-3">
+                            <button type="button" onClick={() => handleSaveShift({ ...s, weekendOut: !s.weekendOut })} className={`min-h-[48px] rounded-xl border px-3 text-xs font-extrabold ${s.weekendOut ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300' : 'border-slate-700 bg-slate-950 text-slate-400'}`}>{s.weekendOut ? '✓ FDS Fora (+100 €)' : 'Marcar FDS (+100 €)'}</button>
+                            <div className="flex gap-2">
+                              <button type="button" onClick={() => { setEditingShift(s); setModalEntryMode(s.id?.startsWith('initial_km_') ? 'direct' : 'odometer'); setIsModalOpen(true); }} className="min-h-[48px] rounded-xl border border-slate-700 bg-slate-800 px-3 text-xs font-bold">Editar</button>
+                              <button type="button" onClick={() => setShifts((prev) => prev.filter((item) => item.id !== s.id))} className="min-h-[48px] rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 text-xs font-bold text-rose-300">Apagar</button>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'tachograph' && <TachographPreview />}
+              {activeTab === 'trailer' && <TrailerPreview />}
+              {activeTab === 'cmr' && <CmrPreview />}
+            </main>
+
+            <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-800 bg-slate-950/95 backdrop-blur-lg">
+              <div className="mx-auto grid max-w-2xl grid-cols-4 gap-1 px-2 py-1.5">
+                {[
+                  { id: 'dashboard', label: 'Salário / KM', IconComp: WalletIcon },
+                  { id: 'tachograph', label: 'Tacógrafo', IconComp: TimerIcon },
+                  { id: 'trailer', label: 'Reboque', IconComp: ContainerIcon },
+                  { id: 'cmr', label: 'CMR PDF', IconComp: ScanIcon },
+                ].map(({ id, label, IconComp }) => (
+                  <button key={id} type="button" onClick={() => setActiveTab(id)} className={`flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-xl text-xs font-semibold ${activeTab === id ? 'bg-amber-500/15 text-amber-400' : 'text-slate-400'}`}>
+                    <IconComp className="h-6 w-6" /><span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </nav>
+
+            <ShiftModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveShift} editingShift={editingShift} suggestedStartKm={suggestedStartKm} monthShifts={monthShifts} retroactiveBonus={retroactiveBonus} extraWeekends={extraWeekends} initialEntryMode={modalEntryMode} defaultDate={selectedMonth === getMonthKey(new Date()) ? getLocalDateISO() : `${selectedMonth}-01`} />
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+  </body>
+</html>
