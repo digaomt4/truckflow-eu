@@ -7,13 +7,18 @@ import {
   computeHomography,
   detectDocumentCornersFromRgba,
   estimateRectifiedSize,
+  insetQuadCorners,
   isAxisAlignedRect,
   isConvexQuad,
   orderQuadCorners,
   rotateNormalizedCorners90,
   simplifyConvexHullToQuad,
 } from '../cmrGeometry';
-import { buildCmrFileName, computePdfPageSizeMm } from '../cmrScanner';
+import {
+  buildCmrFileName,
+  computePdfPageSizeMm,
+  enhanceDocumentScanRgba,
+} from '../cmrScanner';
 
 function pointInQuad(x, y, poly) {
   let inside = false;
@@ -219,5 +224,76 @@ describe('cmrGeometry, auto-detection & naming', () => {
     expect(square.orientation).toBe('p');
     expect(square.pageW).toBe(210);
     expect(square.pageH).toBe(210);
+  });
+
+  it('insets detected corners slightly inward toward centroid while preserving convexity', () => {
+    const outer = [
+      { x: 0.1, y: 0.1 },
+      { x: 0.9, y: 0.1 },
+      { x: 0.9, y: 0.9 },
+      { x: 0.1, y: 0.9 },
+    ];
+    const inset = insetQuadCorners(outer, 0.01);
+    expect(inset).toHaveLength(4);
+    expect(isConvexQuad(inset)).toBe(true);
+    expect(inset[0].x).toBeGreaterThan(outer[0].x);
+    expect(inset[0].y).toBeGreaterThan(outer[0].y);
+    expect(inset[2].x).toBeLessThan(outer[2].x);
+    expect(inset[2].y).toBeLessThan(outer[2].y);
+  });
+
+  it('whitens shadowed paper, darkens ink and preserves stamp color in Cor Limpa mode', () => {
+    const w = 64;
+    const h = 64;
+    const colorRgba = new Uint8ClampedArray(w * h * 4);
+
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        const idx = (y * w + x) * 4;
+        // Shadowed neutral gray paper across entire sheet (~lum 165)
+        let r = 166;
+        let g = 165;
+        let b = 164;
+
+        // Dark handwritten ink line
+        if (y >= 20 && y <= 21 && x >= 10 && x <= 35) {
+          r = 45;
+          g = 46;
+          b = 48;
+        }
+        // Colored red/blue stamp patch
+        if (y >= 40 && y <= 46 && x >= 38 && x <= 52) {
+          r = 180;
+          g = 40;
+          b = 45;
+        }
+
+        colorRgba[idx] = r;
+        colorRgba[idx + 1] = g;
+        colorRgba[idx + 2] = b;
+        colorRgba[idx + 3] = 255;
+      }
+    }
+
+    const highRgba = new Uint8ClampedArray(colorRgba);
+    enhanceDocumentScanRgba(colorRgba, w, h, 'color');
+    enhanceDocumentScanRgba(highRgba, w, h, 'high');
+
+    // Shadowed neutral paper corner -> pure white >= 245 in both color & high modes
+    const paperIdx = (5 * w + 5) * 4;
+    expect(colorRgba[paperIdx]).toBeGreaterThanOrEqual(245);
+    expect(colorRgba[paperIdx + 1]).toBeGreaterThanOrEqual(245);
+    expect(colorRgba[paperIdx + 2]).toBeGreaterThanOrEqual(245);
+    expect(highRgba[paperIdx]).toBeGreaterThanOrEqual(245);
+
+    // Ink pixel -> darkened below original 45
+    const inkIdx = (20 * w + 22) * 4;
+    expect(colorRgba[inkIdx]).toBeLessThan(45);
+    expect(highRgba[inkIdx]).toBeLessThan(40);
+
+    // Red stamp in 'color' mode preserves high red channel & saturation
+    const stampIdx = (43 * w + 45) * 4;
+    expect(colorRgba[stampIdx]).toBeGreaterThan(200);
+    expect(colorRgba[stampIdx] - colorRgba[stampIdx + 1]).toBeGreaterThan(100);
   });
 });

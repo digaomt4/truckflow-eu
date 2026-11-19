@@ -5,6 +5,9 @@ import {
 } from './salaryCalculator';
 import { calculateShiftDurationLabel } from './locationHelper';
 import { SALARY_EXTRA_CATEGORIES } from '../services/salaryExtrasService';
+import { readLocalSettings } from '../services/shiftsService';
+import { getActiveCoupledTrailerPlate } from '../services/trailerService';
+import { resolveExpenseReceipt } from '../services/expensesService';
 
 const EXTRA_CATEGORY_MAP = Object.fromEntries(
   SALARY_EXTRA_CATEGORIES.map((c) => [c.id, c.label])
@@ -57,6 +60,121 @@ function sortShiftsAscending(shifts = []) {
   });
 }
 
+function buildDriverHeaderInfo(profile = {}) {
+  const saved = readLocalSettings();
+  const driverName = String(saved.driverName || profile.driverName || '').trim();
+  const tractorPlate = String(saved.tractorPlate || profile.tractorPlate || '').trim();
+  const trailerPlate = String(profile.trailerPlate || getActiveCoupledTrailerPlate() || '').trim();
+  const companyName = String(saved.companyName || profile.companyName || '').trim();
+  const userEmail = String(profile.userEmail || '').trim();
+
+  const parts = [];
+  if (driverName) parts.push(`Motorista: ${driverName}`);
+  else if (userEmail) parts.push(`Conta: ${userEmail}`);
+  if (tractorPlate) parts.push(`Trator: ${tractorPlate}`);
+  if (trailerPlate) parts.push(`Reboque: ${trailerPlate}`);
+  if (companyName) parts.push(`Empresa: ${companyName}`);
+
+  return {
+    driverName,
+    line: parts.join('  ·  '),
+  };
+}
+
+function renderPdfCorporateHeader(doc, { title, subtitle, driverLine, margin, pageW }) {
+  doc.setFillColor(23, 105, 210);
+  doc.rect(0, 0, pageW, 4, 'F');
+
+  doc.setFontSize(16);
+  doc.setTextColor(32, 41, 56);
+  doc.text(title, margin, 15);
+
+  doc.setFontSize(9);
+  doc.setTextColor(102, 112, 133);
+  doc.text(subtitle, margin, 20.5);
+
+  if (driverLine) {
+    doc.setFillColor(243, 245, 248);
+    doc.roundedRect(margin, 23, pageW - margin * 2, 8.5, 1.8, 1.8, 'F');
+    doc.setFontSize(8.5);
+    doc.setTextColor(32, 41, 56);
+    doc.text(driverLine, margin + 3, 28.5, { maxWidth: pageW - margin * 2 - 6 });
+    return 36;
+  }
+
+  return 27;
+}
+
+function renderDriverSignatureBlock(doc, { y, pageH, margin, pageW, driverName }) {
+  let cursorY = y;
+  if (cursorY + 26 > pageH - 14) {
+    doc.addPage();
+    cursorY = 16;
+  }
+
+  cursorY += 8;
+  doc.setDrawColor(148, 163, 184);
+  doc.line(margin, cursorY + 8, margin + 84, cursorY + 8);
+  doc.line(pageW - margin - 46, cursorY + 8, pageW - margin, cursorY + 8);
+
+  doc.setFontSize(8);
+  doc.setTextColor(102, 112, 133);
+  doc.text(
+    driverName ? `Assinatura do Motorista — ${driverName}` : 'Assinatura do Motorista',
+    margin,
+    cursorY + 13
+  );
+  doc.text('Data / Conferência', pageW - margin - 46, cursorY + 13);
+}
+
+function addPdfPageNumbers(doc, footerPrefix, margin, pageH) {
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= pageCount; p += 1) {
+    doc.setPage(p);
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`${footerPrefix} · Página ${p}/${pageCount}`, margin, pageH - 7);
+  }
+}
+
+function loadReceiptImageForPdf(src) {
+  return new Promise((resolve) => {
+    if (!src) {
+      resolve(null);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      const width = img.naturalWidth || img.width || 800;
+      const height = img.naturalHeight || img.height || 1000;
+      if (src.startsWith('data:image/jpeg') || src.startsWith('data:image/jpg')) {
+        resolve({ dataUrl: src, format: 'JPEG', width, height });
+        return;
+      }
+      if (src.startsWith('data:image/png')) {
+        resolve({ dataUrl: src, format: 'PNG', width, height });
+        return;
+      }
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve({
+          dataUrl: canvas.toDataURL('image/jpeg', 0.85),
+          format: 'JPEG',
+          width,
+          height,
+        });
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
 /**
  * Exporta o fechamento mensal (salário, turnos e extras) em PDF A4 carregando jsPDF sob demanda.
  */
@@ -67,13 +185,22 @@ export async function exportMonthlyReportPdf({
   stats = {},
   extras = [],
   shiftValuesMap = new Map(),
+  driverProfile = {},
 }) {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 12;
-  let y = 16;
+
+  const { driverName, line: driverLine } = buildDriverHeaderInfo(driverProfile);
+  let y = renderPdfCorporateHeader(doc, {
+    title: `TruckFlow EU — Fechamento ${monthLabel}`,
+    subtitle: `Gerado em ${new Date().toLocaleDateString('pt-PT')} · Período: ${monthKey}`,
+    driverLine,
+    margin,
+    pageW,
+  });
 
   const checkPageBreak = (needed = 12) => {
     if (y + needed > pageH - 14) {
@@ -81,21 +208,6 @@ export async function exportMonthlyReportPdf({
       y = 16;
     }
   };
-
-  // Cabeçalho
-  doc.setFontSize(16);
-  doc.setTextColor(15, 23, 42);
-  doc.text(`TruckFlow EU — Fechamento ${monthLabel}`, margin, y);
-  y += 6;
-
-  doc.setFontSize(9);
-  doc.setTextColor(100, 116, 139);
-  doc.text(
-    `Gerado em ${new Date().toLocaleDateString('pt-PT')} · Período: ${monthKey}`,
-    margin,
-    y
-  );
-  y += 7;
 
   // Bloco Resumo Financeiro
   doc.setFillColor(241, 245, 249);
@@ -235,17 +347,13 @@ export async function exportMonthlyReportPdf({
     });
   }
 
-  const pageCount = doc.internal.getNumberOfPages();
-  for (let p = 1; p <= pageCount; p += 1) {
-    doc.setPage(p);
-    doc.setFontSize(8);
-    doc.setTextColor(148, 163, 184);
-    doc.text(
-      `TruckFlow EU · Fechamento ${monthKey} · Página ${p}/${pageCount}`,
-      margin,
-      pageH - 7
-    );
-  }
+  renderDriverSignatureBlock(doc, { y, pageH, margin, pageW, driverName });
+  addPdfPageNumbers(
+    doc,
+    `TruckFlow EU · Fechamento ${monthKey}`,
+    margin,
+    pageH
+  );
 
   const fileName = `TruckFlow_Fechamento_${monthKey}.pdf`;
   const pdfBlob = doc.output('blob');
@@ -343,7 +451,7 @@ export function exportMonthlyReportCsv({
 }
 
 /**
- * Exporta relatório mensal de despesas/reembolsos em PDF A4.
+ * Exporta relatório mensal de despesas/reembolsos em PDF A4 (com fotos dos recibos anexadas).
  */
 export async function exportExpensesReportPdf({
   monthKey,
@@ -351,22 +459,22 @@ export async function exportExpensesReportPdf({
   expenses = [],
   totals = {},
   categoryLabels = {},
+  driverProfile = {},
 }) {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 12;
-  let y = 16;
 
-  doc.setFontSize(16);
-  doc.setTextColor(15, 23, 42);
-  doc.text(`TruckFlow EU — Despesas ${monthLabel}`, margin, y);
-  y += 6;
-  doc.setFontSize(9);
-  doc.setTextColor(100, 116, 139);
-  doc.text(`Gerado em ${new Date().toLocaleDateString('pt-PT')} · Período: ${monthKey}`, margin, y);
-  y += 8;
+  const { driverName, line: driverLine } = buildDriverHeaderInfo(driverProfile);
+  let y = renderPdfCorporateHeader(doc, {
+    title: `TruckFlow EU — Despesas ${monthLabel}`,
+    subtitle: `Gerado em ${new Date().toLocaleDateString('pt-PT')} · Período: ${monthKey}`,
+    driverLine,
+    margin,
+    pageW,
+  });
 
   doc.setFillColor(241, 245, 249);
   doc.roundedRect(margin, y, pageW - margin * 2, 22, 2, 2, 'F');
@@ -408,6 +516,103 @@ export async function exportExpensesReportPdf({
     doc.text(formatEuro(exp.amount), margin + 170, y);
     y += 7;
   });
+
+  renderDriverSignatureBlock(doc, { y, pageH, margin, pageW, driverName });
+
+  // Anexo automático com as fotos dos recibos (4 por página em grade 2x2)
+  const resolvedReceipts = await Promise.all(
+    ordered.map(async (exp, idx) => {
+      const rawSrc = await resolveExpenseReceipt(exp);
+      if (!rawSrc) return null;
+      const imgInfo = await loadReceiptImageForPdf(rawSrc);
+      if (!imgInfo) return null;
+      return { index: idx + 1, exp, imgInfo };
+    })
+  );
+  const attachedReceipts = resolvedReceipts.filter(Boolean);
+
+  if (attachedReceipts.length > 0) {
+    const colGap = 6;
+    const rowGap = 6;
+    const cellW = (pageW - margin * 2 - colGap) / 2;
+    const topStart = 24;
+    const cellH = (pageH - topStart - 16 - rowGap) / 2;
+
+    for (let i = 0; i < attachedReceipts.length; i += 4) {
+      doc.addPage();
+      doc.setFillColor(23, 105, 210);
+      doc.rect(0, 0, pageW, 4, 'F');
+
+      doc.setFontSize(13);
+      doc.setTextColor(32, 41, 56);
+      doc.text(
+        `Anexo — Comprovantes e Recibos (${attachedReceipts.length})`,
+        margin,
+        16
+      );
+
+      const batch = attachedReceipts.slice(i, i + 4);
+      batch.forEach((entry, slot) => {
+        const col = slot % 2;
+        const row = Math.floor(slot / 2);
+        const cx = margin + col * (cellW + colGap);
+        const cy = topStart + row * (cellH + rowGap);
+
+        doc.setDrawColor(203, 213, 225);
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(cx, cy, cellW, cellH, 2, 2, 'FD');
+
+        const { index, exp, imgInfo } = entry;
+        const cat = categoryLabels[exp.category] || exp.category || 'Recibo';
+        doc.setFontSize(8.5);
+        doc.setTextColor(32, 41, 56);
+        doc.text(
+          `#${index} · ${exp.date || '--'} · ${cat} · ${formatEuro(exp.amount)}`,
+          cx + 3,
+          cy + 6
+        );
+
+        doc.setFontSize(7.5);
+        doc.setTextColor(102, 112, 133);
+        const metaLine = `${exp.reimbursable ? 'Reembolsável' : 'Pessoal'}${
+          exp.description ? ` · ${exp.description}` : ''
+        }`.slice(0, 52);
+        doc.text(metaLine, cx + 3, cy + 11);
+
+        const boxX = cx + 3;
+        const boxY = cy + 14;
+        const boxW = cellW - 6;
+        const boxH = cellH - 17;
+        const ratio = imgInfo.width / imgInfo.height;
+        let renderW = boxW;
+        let renderH = renderW / ratio;
+        if (renderH > boxH) {
+          renderH = boxH;
+          renderW = renderH * ratio;
+        }
+        const ix = boxX + (boxW - renderW) / 2;
+        const iy = boxY + (boxH - renderH) / 2;
+
+        doc.addImage(
+          imgInfo.dataUrl,
+          imgInfo.format,
+          ix,
+          iy,
+          renderW,
+          renderH,
+          undefined,
+          'FAST'
+        );
+      });
+    }
+  }
+
+  addPdfPageNumbers(
+    doc,
+    `TruckFlow EU · Despesas ${monthKey}`,
+    margin,
+    pageH
+  );
 
   const fileName = `TruckFlow_Despesas_${monthKey}.pdf`;
   const pdfBlob = doc.output('blob');

@@ -296,7 +296,7 @@ export default function CmrCropModal({
       const croppedDataUrl = await cropAndWarpCmrImage(
         currentSrc,
         corners,
-        1500
+        1900
       );
       await onApply({
         croppedDataUrl,

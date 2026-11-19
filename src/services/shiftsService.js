@@ -30,6 +30,9 @@ export const DEFAULT_SETTINGS = {
   rateStandard: RATE_STANDARD,
   rateBonus: RATE_BONUS,
   weekendBonusValue: WEEKEND_BONUS_VALUE,
+  driverName: '',
+  tractorPlate: '',
+  companyName: '',
 };
 
 function readLocalShifts() {
@@ -72,6 +75,12 @@ function normalizeSettings(raw) {
       raw?.weekendBonusValue,
       WEEKEND_BONUS_VALUE
     ),
+    driverName: String(raw?.driverName || '').trim().slice(0, 80),
+    tractorPlate: String(raw?.tractorPlate || '')
+      .trim()
+      .toUpperCase()
+      .slice(0, 24),
+    companyName: String(raw?.companyName || '').trim().slice(0, 80),
   };
 }
 
@@ -257,7 +266,7 @@ export async function getSalarySettings(userId) {
     const settingsRef = doc(db, 'users', userId, 'settings', 'salary');
     const snap = await getDoc(settingsRef);
     if (snap.exists()) {
-      const merged = normalizeSettings(snap.data());
+      const merged = normalizeSettings({ ...localSettings, ...snap.data() });
       writeLocalSettings(merged);
       return merged;
     }
@@ -280,8 +289,14 @@ export async function saveSalarySettings(userId, settings) {
   writeLocalSettings(merged);
 
   if (isFirebaseConfigured && db && userId) {
+    const {
+      driverName: _driverName,
+      tractorPlate: _tractorPlate,
+      companyName: _companyName,
+      ...firestorePayload
+    } = merged;
     const settingsRef = doc(db, 'users', userId, 'settings', 'salary');
-    await setDoc(settingsRef, merged, { merge: true });
+    await setDoc(settingsRef, firestorePayload, { merge: true });
   }
 
   return merged;

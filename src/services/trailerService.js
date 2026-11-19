@@ -95,6 +95,17 @@ function sortDescending(records) {
   );
 }
 
+/**
+ * Retorna a matrícula do reboque atualmente engatado (ou '' se desengatado).
+ */
+export function getActiveCoupledTrailerPlate() {
+  const latest = sortDescending(readLocalTrailers())[0];
+  if (!latest || latest.actionType !== 'couple' || !latest.plate) {
+    return '';
+  }
+  return latest.country ? `${latest.plate} (${latest.country})` : latest.plate;
+}
+
 function createRecordId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();

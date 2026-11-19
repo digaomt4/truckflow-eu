@@ -25,6 +25,9 @@ export default function SettingsModal({
 }) {
   const dialogRef = useRef(null);
   const [odometerInput, setOdometerInput] = useState('');
+  const [driverNameInput, setDriverNameInput] = useState('');
+  const [tractorPlateInput, setTractorPlateInput] = useState('');
+  const [companyNameInput, setCompanyNameInput] = useState('');
   const [theme, setTheme] = useState(settings.theme === 'dark' ? 'dark' : 'light');
   const [retroactiveBonus, setRetroactiveBonus] = useState(
     settings.retroactiveBonus !== false
@@ -46,6 +49,9 @@ export default function SettingsModal({
     setSavedMsg('');
     const currentOdo = Number(settings.initialOdometer) || 0;
     setOdometerInput(currentOdo > 0 ? String(currentOdo) : '');
+    setDriverNameInput(settings.driverName || '');
+    setTractorPlateInput(settings.tractorPlate || '');
+    setCompanyNameInput(settings.companyName || '');
     setTheme(settings.theme === 'dark' ? 'dark' : 'light');
     setRetroactiveBonus(settings.retroactiveBonus !== false);
     setBaseSalaryInput(String(settings.baseSalary ?? BASE_SALARY));
@@ -158,6 +164,9 @@ export default function SettingsModal({
       await onUpdateSettings({
         ...settings,
         initialOdometer: Math.round(parsedOdo),
+        driverName: driverNameInput.trim(),
+        tractorPlate: tractorPlateInput.trim().toUpperCase(),
+        companyName: companyNameInput.trim(),
         theme,
         retroactiveBonus,
         baseSalary: Math.round(parsedBase * 100) / 100,
@@ -253,6 +262,53 @@ export default function SettingsModal({
                   (Base atual: {formatKm(settings.initialOdometer)} km)
                 </span>
               )}
+            </p>
+          </div>
+
+          {/* Seção 1B: Identificação nos Relatórios PDF */}
+          <div>
+            <span className="mb-1.5 block px-1 text-[12px] font-semibold uppercase tracking-wider text-[var(--ios-label-secondary)]">
+              Identificação nos Relatórios PDF
+            </span>
+            <div className="cp-inset overflow-hidden">
+              <label className="flex min-h-[50px] items-center justify-between gap-3 border-b ios-sep-border px-4">
+                <span className="text-[14px] font-medium">Nome do Motorista</span>
+                <input
+                  type="text"
+                  maxLength={80}
+                  value={driverNameInput}
+                  onChange={(e) => setDriverNameInput(e.target.value)}
+                  placeholder="Ex: João Silva"
+                  className="w-44 bg-transparent text-right text-[14px] font-semibold outline-none placeholder:text-[var(--ios-label-tertiary)]"
+                />
+              </label>
+
+              <label className="flex min-h-[50px] items-center justify-between gap-3 border-b ios-sep-border px-4">
+                <span className="text-[14px] font-medium">Matrícula do Trator</span>
+                <input
+                  type="text"
+                  maxLength={24}
+                  value={tractorPlateInput}
+                  onChange={(e) => setTractorPlateInput(e.target.value.toUpperCase())}
+                  placeholder="Ex: 00-AA-00"
+                  className="w-44 bg-transparent text-right text-[14px] font-bold uppercase outline-none placeholder:text-[var(--ios-label-tertiary)]"
+                />
+              </label>
+
+              <label className="flex min-h-[50px] items-center justify-between gap-3 px-4">
+                <span className="text-[14px] font-medium">Empresa / Frota</span>
+                <input
+                  type="text"
+                  maxLength={80}
+                  value={companyNameInput}
+                  onChange={(e) => setCompanyNameInput(e.target.value)}
+                  placeholder="Ex: Transportes Ibéricos"
+                  className="w-44 bg-transparent text-right text-[14px] font-semibold outline-none placeholder:text-[var(--ios-label-tertiary)]"
+                />
+              </label>
+            </div>
+            <p className="mt-1.5 px-1 text-[12px] leading-relaxed text-[var(--ios-label-secondary)]">
+              Aparece automaticamente no cabeçalho dos PDFs de fechamento e despesas (junto com a matrícula do reboque engatado).
             </p>
           </div>
 

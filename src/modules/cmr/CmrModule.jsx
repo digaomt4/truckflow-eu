@@ -41,7 +41,7 @@ import ImageLightbox from '../../components/ui/ImageLightbox';
 import CmrCropModal from './CmrCropModal';
 
 const CONTRAST_MODES = [
-  { id: 'color', label: 'Cor' },
+  { id: 'color', label: 'Cor Limpa' },
   { id: 'normal', label: 'Normal' },
   { id: 'high', label: 'Contraste' },
   { id: 'ultra', label: 'Ultra P&B' },

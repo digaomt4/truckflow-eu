@@ -235,6 +235,12 @@ export default function DashboardModule({
         stats,
         extras: monthExtras,
         shiftValuesMap,
+        driverProfile: {
+          driverName: settings?.driverName || user?.displayName || '',
+          tractorPlate: settings?.tractorPlate || '',
+          companyName: settings?.companyName || '',
+          userEmail: user?.email || '',
+        },
       });
       if (res.method === 'shared') {
         setExportStatus(`Relatório ${res.fileName} compartilhado.`);

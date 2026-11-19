@@ -218,6 +218,10 @@ export default function ExpensesModule({ user }) {
         expenses: monthExpenses,
         totals,
         categoryLabels,
+        driverProfile: {
+          driverName: user?.displayName || '',
+          userEmail: user?.email || '',
+        },
       });
       if (res.method === 'downloaded') {
         setSuccessMsg(`Relatório ${res.fileName} baixado!`);

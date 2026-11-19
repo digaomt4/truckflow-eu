@@ -223,6 +223,23 @@ export function orderQuadCorners(pts) {
 }
 
 /**
+ * Recua suavemente os 4 cantos detectados em direção ao centroide (~1%)
+ * para evitar filetes escuros da mesa/painel nas bordas do PDF recortado.
+ */
+export function insetQuadCorners(corners, insetRatio = 0.01) {
+  if (!Array.isArray(corners) || corners.length !== 4) return corners;
+  const ratio = Math.max(0, Math.min(0.08, Number(insetRatio) || 0));
+  const cx = (corners[0].x + corners[1].x + corners[2].x + corners[3].x) * 0.25;
+  const cy = (corners[0].y + corners[1].y + corners[2].y + corners[3].y) * 0.25;
+  return corners.map((c) =>
+    clampCorner({
+      x: c.x + (cx - c.x) * ratio,
+      y: c.y + (cy - c.y) * ratio,
+    })
+  );
+}
+
+/**
  * Calcula o envoltório convexo (Andrew's Monotone Chain) de um conjunto de pontos 2D.
  */
 export function computeConvexHull(points) {
@@ -567,7 +584,7 @@ export function detectDocumentCornersFromRgba(rgbaData, width, height) {
       const quad = simplifyConvexHullToQuad(hull);
       const valid = normalizeAndValidateQuad(quad, w, h, 0.12, 0.96);
       if (valid) {
-        return { detected: true, corners: valid };
+        return { detected: true, corners: insetQuadCorners(valid, 0.01) };
       }
     }
   }
@@ -635,7 +652,7 @@ export function detectDocumentCornersFromRgba(rgbaData, width, height) {
         const quad = simplifyConvexHullToQuad(hull);
         const valid = normalizeAndValidateQuad(quad, w, h, 0.15, 0.92);
         if (valid) {
-          return { detected: true, corners: valid };
+          return { detected: true, corners: insetQuadCorners(valid, 0.01) };
         }
       }
     }

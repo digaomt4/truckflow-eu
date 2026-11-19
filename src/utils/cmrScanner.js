@@ -97,7 +97,7 @@ export async function detectDocumentCornersFromImage(imageSource) {
 export async function cropAndWarpCmrImage(
   imageSource,
   corners,
-  maxDim = 1500
+  maxDim = 1900
 ) {
   if (!Array.isArray(corners) || corners.length !== 4) {
     return imageSource;
@@ -221,15 +221,154 @@ export async function cropAndWarpCmrImage(
 }
 
 /**
+ * Aplica branqueamento adaptativo de fundo (remoção de sombras por iluminação local)
+ * e máscara de nitidez (Unsharp Mask) via imagem integral O(1) por pixel.
+ * No modo 'color' ("Cor Limpa"), deixa o papel branco uniforme preservando
+ * e realçando a cor de carimbos e assinaturas.
+ */
+export function enhanceDocumentScanRgba(
+  rgbaData,
+  width,
+  height,
+  mode = 'high'
+) {
+  const w = Math.floor(Number(width) || 0);
+  const h = Math.floor(Number(height) || 0);
+  const total = w * h;
+  if (!rgbaData || w < 4 || h < 4 || rgbaData.length < total * 4) {
+    return rgbaData;
+  }
+
+  const lums = new Uint8Array(total);
+  const iw = w + 1;
+  const integral = new Uint32Array(iw * (h + 1));
+
+  for (let y = 0; y < h; y += 1) {
+    let rowSum = 0;
+    const rowOff = y * w;
+    const prevRowInt = y * iw;
+    const currRowInt = (y + 1) * iw;
+
+    for (let x = 0; x < w; x += 1) {
+      const i = rowOff + x;
+      const p = i * 4;
+      const lum = Math.max(
+        0,
+        Math.min(
+          255,
+          Math.round(
+            0.299 * rgbaData[p] +
+              0.587 * rgbaData[p + 1] +
+              0.114 * rgbaData[p + 2]
+          )
+        )
+      );
+      lums[i] = lum;
+      rowSum += lum;
+      integral[currRowInt + x + 1] = integral[prevRowInt + x + 1] + rowSum;
+    }
+  }
+
+  const boxMean = (x, y, r) => {
+    const x0 = Math.max(0, x - r);
+    const y0 = Math.max(0, y - r);
+    const x1 = Math.min(w - 1, x + r);
+    const y1 = Math.min(h - 1, y + r);
+    const sum =
+      integral[(y1 + 1) * iw + (x1 + 1)] -
+      integral[y0 * iw + (x1 + 1)] -
+      integral[(y1 + 1) * iw + x0] +
+      integral[y0 * iw + x0];
+    return sum / ((x1 - x0 + 1) * (y1 - y0 + 1));
+  };
+
+  const bgRadius = Math.max(12, Math.round(Math.min(w, h) * 0.045));
+  const config =
+    mode === 'ultra'
+      ? { contrast: 2.35, whiteThreshold: 195, blackThreshold: 70 }
+      : mode === 'normal'
+      ? { contrast: 1.4, whiteThreshold: 230, blackThreshold: 25 }
+      : { contrast: 1.9, whiteThreshold: 215, blackThreshold: 45 };
+
+  for (let y = 0; y < h; y += 1) {
+    const rowOff = y * w;
+    for (let x = 0; x < w; x += 1) {
+      const i = rowOff + x;
+      const p = i * 4;
+      const lum = lums[i];
+      const blur3 = boxMean(x, y, 1);
+      const detail = lum - blur3;
+      const bgMean = boxMean(x, y, bgRadius);
+      const bgWhite = Math.max(70, Math.min(255, bgMean * 1.04));
+
+      if (mode === 'color') {
+        const r = rgbaData[p];
+        const g = rgbaData[p + 1];
+        const b = rgbaData[p + 2];
+        const sat = Math.max(r, g, b) - Math.min(r, g, b);
+        const scale = Math.min(2.6, 255 / bgWhite);
+
+        let nr = Math.max(0, Math.min(255, r * scale + detail * 0.85));
+        let ng = Math.max(0, Math.min(255, g * scale + detail * 0.85));
+        let nb = Math.max(0, Math.min(255, b * scale + detail * 0.85));
+        const normLum = 0.299 * nr + 0.587 * ng + 0.114 * nb;
+
+        if (sat < 38 && normLum >= 195) {
+          const t = Math.min(1, (normLum - 195) / 38);
+          nr += (255 - nr) * t;
+          ng += (255 - ng) * t;
+          nb += (255 - nb) * t;
+        } else if (sat < 35 && normLum < 165) {
+          const factor = Math.max(0.45, normLum / 165);
+          nr *= factor;
+          ng *= factor;
+          nb *= factor;
+        } else if (sat >= 24) {
+          const avg = (nr + ng + nb) / 3;
+          const boost = 1.18;
+          nr = Math.max(0, Math.min(255, avg + (nr - avg) * boost));
+          ng = Math.max(0, Math.min(255, avg + (ng - avg) * boost));
+          nb = Math.max(0, Math.min(255, avg + (nb - avg) * boost));
+        }
+
+        rgbaData[p] = Math.round(nr);
+        rgbaData[p + 1] = Math.round(ng);
+        rgbaData[p + 2] = Math.round(nb);
+      } else {
+        const normLum = Math.max(
+          0,
+          Math.min(255, ((lum + detail * 1.15) / bgWhite) * 255)
+        );
+        let enhanced = (normLum - 128) * config.contrast + 128;
+
+        if (enhanced >= config.whiteThreshold) {
+          enhanced = 255;
+        } else if (enhanced <= config.blackThreshold) {
+          enhanced = 0;
+        } else {
+          enhanced = Math.max(0, Math.min(255, Math.round(enhanced)));
+        }
+
+        rgbaData[p] = enhanced;
+        rgbaData[p + 1] = enhanced;
+        rgbaData[p + 2] = enhanced;
+      }
+    }
+  }
+
+  return rgbaData;
+}
+
+/**
  * Processa a foto do CMR via HTML5 Canvas:
- * - Redimensiona para no máximo 1500px (economia máxima de dados em roaming)
- * - Aplica filtro Scanner ('color' | 'normal' | 'high' | 'ultra')
+ * - Redimensiona para no máximo 1900px (alta definição para leitura nítida dos quadros 1–24)
+ * - Aplica filtro Scanner adaptativo ('color' | 'normal' | 'high' | 'ultra')
  * - Gera também uma miniatura leve para o histórico
  */
 export async function processCmrImageToCanvas(imageSource, mode = 'high') {
   const img = await loadImage(imageSource);
 
-  const MAX_DIM = 1500;
+  const MAX_DIM = 1900;
   let width = img.naturalWidth || img.width;
   let height = img.naturalHeight || img.height;
 
@@ -247,40 +386,13 @@ export async function processCmrImageToCanvas(imageSource, mode = 'high') {
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(img, 0, 0, width, height);
 
-  if (mode !== 'color') {
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-
-    const config =
-      mode === 'ultra'
-        ? { contrast: 2.35, whiteThreshold: 195, blackThreshold: 65 }
-        : mode === 'normal'
-        ? { contrast: 1.35, whiteThreshold: 232, blackThreshold: 20 }
-        : { contrast: 1.85, whiteThreshold: 212, blackThreshold: 40 };
-
-    for (let i = 0; i < data.length; i += 4) {
-      const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-      let enhanced = (lum - 128) * config.contrast + 128;
-
-      if (enhanced >= config.whiteThreshold) {
-        enhanced = 255;
-      } else if (enhanced <= config.blackThreshold) {
-        enhanced = 0;
-      } else {
-        enhanced = Math.max(0, Math.min(255, enhanced));
-      }
-
-      data[i] = enhanced;
-      data[i + 1] = enhanced;
-      data[i + 2] = enhanced;
-    }
-
-    ctx.putImageData(imageData, 0, 0);
-  }
+  const imageData = ctx.getImageData(0, 0, width, height);
+  enhanceDocumentScanRgba(imageData.data, width, height, mode);
+  ctx.putImageData(imageData, 0, 0);
 
   const scanDataUrl = canvas.toDataURL(
     'image/jpeg',
-    mode === 'color' ? 0.78 : 0.72
+    mode === 'color' ? 0.8 : 0.75
   );
 
   // Miniatura compacta para listagem de histórico
