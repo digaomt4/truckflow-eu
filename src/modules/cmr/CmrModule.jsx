@@ -4,7 +4,6 @@ import {
   Share2,
   Download,
   Trash2,
-  Sparkles,
   FileText,
   AlertCircle,
   CheckCircle2,
@@ -20,7 +19,6 @@ import {
 } from 'lucide-react';
 import {
   buildCmrFileName,
-  createDemoCmrDataUrl,
   detectDocumentCornersFromImage,
   generateCmrPdf,
   processCmrImageToCanvas,
@@ -199,48 +197,6 @@ export default function CmrModule({ user }) {
     }
   };
 
-  const handleCreateDemoCmr = async () => {
-    if (pages.length >= MAX_PAGES_PER_PDF) {
-      setError(`Limite de ${MAX_PAGES_PER_PDF} páginas por PDF atingido.`);
-      return;
-    }
-    setError('');
-    setStatusMessage('');
-    setWhatsappFallbackText('');
-
-    const demoLoad = loadNumber || '84920';
-    if (!loadNumber) setLoadNumber(demoLoad);
-
-    setProcessing(true);
-    try {
-      const demoUrl = createDemoCmrDataUrl(demoLoad, date);
-      const processedScan = await processCmrImageToCanvas(demoUrl, contrastMode);
-      setPages((prev) => {
-        const next = [
-          ...prev,
-          {
-            id: `demo_${Date.now()}`,
-            rawImageUrl: demoUrl,
-            croppedImageUrl: demoUrl,
-            corners: [
-              { x: 0, y: 0 },
-              { x: 1, y: 0 },
-              { x: 1, y: 1 },
-              { x: 0, y: 1 },
-            ],
-            processedScan,
-          },
-        ];
-        setSelectedPageIdx(next.length - 1);
-        return next;
-      });
-    } catch (err) {
-      setError(err.message || 'Erro ao gerar CMR de teste.');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
   const handleMovePage = (idx, dir) => {
     const targetIdx = idx + dir;
     if (targetIdx < 0 || targetIdx >= pages.length) return;
@@ -277,7 +233,7 @@ export default function CmrModule({ user }) {
     setWhatsappFallbackText('');
 
     if (pages.length === 0) {
-      setError('Tire uma foto do CMR (ou gere um CMR de teste) primeiro.');
+      setError('Tire uma foto do CMR ou selecione da galeria primeiro.');
       return;
     }
 
@@ -439,7 +395,7 @@ export default function CmrModule({ user }) {
           className="hidden"
         />
 
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2">
           <button
             type="button"
             onClick={() => cameraInputRef.current?.click()}
@@ -460,15 +416,6 @@ export default function CmrModule({ user }) {
           >
             <ImageIcon className="h-4 w-4 text-[var(--ios-blue)]" aria-hidden="true" />
             Galeria
-          </button>
-
-          <button
-            type="button"
-            onClick={handleCreateDemoCmr}
-            className="flex min-h-[52px] items-center justify-center gap-1.5 rounded-xl border ios-sep-border bg-[var(--ios-card)] px-3 text-[13px] font-semibold text-[var(--ios-blue)] shadow-sm transition hover:bg-[var(--ios-fill)] active:scale-95"
-          >
-            <Sparkles className="h-4 w-4" aria-hidden="true" />
-            Teste
           </button>
         </div>
 
