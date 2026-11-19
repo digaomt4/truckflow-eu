@@ -13,7 +13,7 @@ import {
   rotateNormalizedCorners90,
   simplifyConvexHullToQuad,
 } from '../cmrGeometry';
-import { buildCmrFileName } from '../cmrScanner';
+import { buildCmrFileName, computePdfPageSizeMm } from '../cmrScanner';
 
 function pointInQuad(x, y, poly) {
   let inside = false;
@@ -202,5 +202,22 @@ describe('cmrGeometry, auto-detection & naming', () => {
     expect(buildCmrFileName('2026-11-18', ' 84920 / A ')).toBe(
       'CMR_2026-11-18_84920-A.pdf'
     );
+  });
+
+  it('computes borderless PDF page dimensions matching exact image aspect ratio', () => {
+    const portrait = computePdfPageSizeMm(1000, 1400);
+    expect(portrait.orientation).toBe('p');
+    expect(portrait.pageW).toBe(210);
+    expect(portrait.pageW / portrait.pageH).toBeCloseTo(1000 / 1400, 3);
+
+    const landscape = computePdfPageSizeMm(1500, 1000);
+    expect(landscape.orientation).toBe('l');
+    expect(landscape.pageW).toBe(297);
+    expect(landscape.pageW / landscape.pageH).toBeCloseTo(1500 / 1000, 3);
+
+    const square = computePdfPageSizeMm(1200, 1200);
+    expect(square.orientation).toBe('p');
+    expect(square.pageW).toBe(210);
+    expect(square.pageH).toBe(210);
   });
 });

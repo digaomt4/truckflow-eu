@@ -383,7 +383,27 @@ export function createDemoCmrDataUrl(loadNumber = '84920', dateStr = '2026-11-17
 }
 
 /**
- * Gera um arquivo PDF A4 (1 ou múltiplas páginas) carregando jsPDF sob demanda.
+ * Calcula as dimensões da página do PDF (em mm) com exatamente a mesma proporção
+ * da imagem recortada, eliminando qualquer borda ou faixa branca ao redor do CMR.
+ */
+export function computePdfPageSizeMm(imgWidth, imgHeight) {
+  const safeW = Math.max(1, Number(imgWidth) || 1000);
+  const safeH = Math.max(1, Number(imgHeight) || 1400);
+
+  if (safeH >= safeW) {
+    const pageW = 210;
+    const pageH = Number(((210 * safeH) / safeW).toFixed(2));
+    return { orientation: 'p', pageW, pageH };
+  }
+
+  const pageW = 297;
+  const pageH = Number(((297 * safeH) / safeW).toFixed(2));
+  return { orientation: 'l', pageW, pageH };
+}
+
+/**
+ * Gera um arquivo PDF sem bordas brancas (1 ou múltiplas páginas), ajustando cada página
+ * à proporção exata da foto recortada e carregando jsPDF sob demanda.
  */
 export async function generateCmrPdf(pagesInput, metadata = {}) {
   const pages = Array.isArray(pagesInput)
@@ -394,49 +414,31 @@ export async function generateCmrPdf(pagesInput, metadata = {}) {
     throw new Error('Nenhuma página digitalizada para gerar o PDF.');
   }
 
-  const { jsPDF } = await import('jspdf');
+  const [{ jsPDF }, loadedImages] = await Promise.all([
+    import('jspdf'),
+    Promise.all(pages.map((src) => loadImage(src))),
+  ]);
   const fileName = buildCmrFileName(metadata.date, metadata.loadNumber);
 
+  const dimensions = loadedImages.map((img) =>
+    computePdfPageSizeMm(img.naturalWidth || img.width, img.naturalHeight || img.height)
+  );
+  const firstDim = dimensions[0];
+
   const doc = new jsPDF({
-    orientation: 'portrait',
+    orientation: firstDim.orientation,
     unit: 'mm',
-    format: 'a4',
+    format: [firstDim.pageW, firstDim.pageH],
     compress: true,
   });
 
-  const pageW = doc.internal.pageSize.getWidth(); // 210mm
-  const pageH = doc.internal.pageSize.getHeight(); // 297mm
-  const margin = 8;
-  const maxW = pageW - margin * 2;
-  const maxH = pageH - margin * 2 - 10;
-
   for (let i = 0; i < pages.length; i += 1) {
-    if (i > 0) doc.addPage();
-    const img = await loadImage(pages[i]);
-    const imgRatio =
-      (img.naturalWidth || img.width) / (img.naturalHeight || img.height);
-    let renderW = maxW;
-    let renderH = renderW / imgRatio;
-
-    if (renderH > maxH) {
-      renderH = maxH;
-      renderW = renderH * imgRatio;
+    const dim = dimensions[i];
+    if (i > 0) {
+      doc.addPage([dim.pageW, dim.pageH], dim.orientation);
     }
 
-    const x = (pageW - renderW) / 2;
-    const y = margin;
-
-    doc.addImage(pages[i], 'JPEG', x, y, renderW, renderH, undefined, 'FAST');
-
-    doc.setFontSize(8);
-    doc.setTextColor(90, 90, 90);
-    doc.text(
-      `TruckFlow EU · ${fileName}${metadata.notes ? ` · ${metadata.notes}` : ''} · Pág. ${
-        i + 1
-      }/${pages.length}`,
-      margin,
-      pageH - 4
-    );
+    doc.addImage(pages[i], 'JPEG', 0, 0, dim.pageW, dim.pageH, undefined, 'FAST');
   }
 
   const pdfBlob = doc.output('blob');
