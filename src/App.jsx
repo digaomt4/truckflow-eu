@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { Truck } from 'lucide-react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
+import { Loader2, Truck } from 'lucide-react';
 import Header from './components/layout/Header';
 import BottomNav from './components/layout/BottomNav';
 import AuthModal from './components/layout/AuthModal';
 import SettingsModal from './components/layout/SettingsModal';
 import LoginScreen from './components/auth/LoginScreen';
 import DashboardModule from './modules/dashboard/DashboardModule';
-import TachographModule from './modules/tachograph/TachographModule';
-import TrailerModule from './modules/trailer/TrailerModule';
-import CmrModule from './modules/cmr/CmrModule';
+
+const TrailerModule = lazy(() => import('./modules/trailer/TrailerModule'));
+const CmrModule = lazy(() => import('./modules/cmr/CmrModule'));
+const ExpensesModule = lazy(() => import('./modules/expenses/ExpensesModule'));
 import {
   isFirebaseConfigured,
   subscribeToAuthChanges,
@@ -23,6 +24,8 @@ import {
   toggleShiftWeekend,
 } from './services/shiftsService';
 
+const CLEAN_PRO_MIGRATION_KEY = 'truckflow_ui_clean_pro_v1';
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isOnline, setIsOnline] = useState(
@@ -32,20 +35,30 @@ export default function App() {
   const [authChecking, setAuthChecking] = useState(true);
   const [allowOfflineGuest, setAllowOfflineGuest] = useState(false);
   const [shifts, setShifts] = useState([]);
-  const [settings, setSettings] = useState(() => readLocalSettings());
+  const [settings, setSettings] = useState(() => {
+    const initial = readLocalSettings();
+    try {
+      if (!localStorage.getItem(CLEAN_PRO_MIGRATION_KEY)) {
+        return { ...initial, theme: 'light' };
+      }
+    } catch {
+      // Ignora indisponibilidade de localStorage
+    }
+    return initial;
+  });
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   // Sincroniza o tema Claro / Escuro no elemento raiz <html> e meta theme-color
   useEffect(() => {
     const root = document.documentElement;
-    const isLight = settings.theme === 'light';
+    const isLight = settings.theme !== 'dark';
     root.classList.toggle('light', isLight);
     root.classList.toggle('dark', !isLight);
 
     const themeMeta = document.querySelector('meta[name="theme-color"]');
     if (themeMeta) {
-      themeMeta.setAttribute('content', isLight ? '#f2f2f7' : '#000000');
+      themeMeta.setAttribute('content', isLight ? '#F3F5F8' : '#0F172A');
     }
   }, [settings.theme]);
 
@@ -82,6 +95,19 @@ export default function App() {
     });
 
     getSalarySettings(user?.uid || null).then((loadedSettings) => {
+      try {
+        if (!localStorage.getItem(CLEAN_PRO_MIGRATION_KEY)) {
+          localStorage.setItem(CLEAN_PRO_MIGRATION_KEY, '1');
+          if (loadedSettings.theme !== 'light') {
+            const migrated = { ...loadedSettings, theme: 'light' };
+            setSettings(migrated);
+            saveSalarySettings(user?.uid || null, migrated).catch(() => {});
+            return;
+          }
+        }
+      } catch {
+        // Ignora indisponibilidade de localStorage
+      }
       setSettings(loadedSettings);
     });
 
@@ -230,9 +256,10 @@ export default function App() {
         onOpenSettings={() => setIsSettingsModalOpen(true)}
       />
 
-      <main className="mx-auto max-w-2xl px-4 pb-28 pt-4">
+      <main className="mx-auto max-w-3xl px-4 pb-28 pt-5 sm:px-6">
         {activeTab === 'dashboard' && (
           <DashboardModule
+            user={user}
             shifts={shifts}
             settings={settings}
             onSaveShift={handleSaveShift}
@@ -243,11 +270,20 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'tachograph' && <TachographModule user={user} />}
+        <Suspense
+          fallback={
+            <div className="ios-card flex min-h-[200px] items-center justify-center gap-2 text-sm text-[var(--ios-label-secondary)]">
+              <Loader2 className="h-5 w-5 animate-spin text-[var(--ios-blue)]" aria-hidden="true" />
+              Carregando módulo...
+            </div>
+          }
+        >
+          {activeTab === 'trailer' && <TrailerModule user={user} />}
 
-        {activeTab === 'trailer' && <TrailerModule user={user} />}
+          {activeTab === 'cmr' && <CmrModule user={user} />}
 
-        {activeTab === 'cmr' && <CmrModule user={user} />}
+          {activeTab === 'expenses' && <ExpensesModule user={user} />}
+        </Suspense>
       </main>
 
       <BottomNav activeTab={activeTab} onChangeTab={setActiveTab} />

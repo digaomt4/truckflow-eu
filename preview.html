@@ -8,7 +8,7 @@
     />
     <meta name="theme-color" content="#020617" />
     <meta name="color-scheme" content="dark" />
-    <title>TruckFlow EU — Preview Completo (Módulos 1 a 4)</title>
+    <title>TruckFlow EU — Preview Completo (Salário, Reboque e CMR)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -197,92 +197,7 @@
       };
 
       // ==========================================
-      // CONSTANTES & UTILS MÓDULO 2 (TACÓGRAFO)
-      // ==========================================
-      const CONTINUOUS_LIMIT_SEC = 4.5 * 3600;
-      const ALERT_30M_LEFT_SEC = 4 * 3600;
-      const ALERT_15M_LEFT_SEC = 4.25 * 3600;
-      const BREAK_FULL_SEC = 45 * 60;
-      const BREAK_SPLIT_1_SEC = 15 * 60;
-      const BREAK_SPLIT_2_SEC = 30 * 60;
-      const DAILY_LIMIT_9H_SEC = 9 * 3600;
-      const DAILY_LIMIT_10H_SEC = 10 * 3600;
-      const TACHO_STORAGE_KEY = 'truckflow_tacho_v1';
-
-      function getCurrentMondayISO(now = new Date()) {
-        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const day = d.getDay();
-        const diff = day === 0 ? -6 : 1 - day;
-        d.setDate(d.getDate() + diff);
-        return getLocalDateISO(d);
-      }
-
-      function createInitialTachoState() {
-        return {
-          status: 'idle',
-          lastUpdatedAt: Date.now(),
-          continuousDriveSeconds: 0,
-          dailyDriveSeconds: 0,
-          dailyExtendedTo10h: false,
-          currentBreakSeconds: 0,
-          firstSplitBreakDone: false,
-          dailyRestSeconds: 0,
-          dailyRestTargetHours: 11,
-          weekMondayISO: getCurrentMondayISO(),
-          weekly10hExtensionsUsed: 0,
-          weeklyReducedRestsUsed: 0,
-          soundEnabled: true,
-          alertsFired: { min30: false, min15: false, limit430: false, breakDone: false },
-          lastNotice: '',
-          history: [],
-        };
-      }
-
-      const formatHMS = (sec) => {
-        const s = Math.max(0, Math.floor(sec));
-        return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(
-          Math.floor((s % 3600) / 60)
-        ).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-      };
-
-      const formatHM = (sec) => {
-        const s = Math.max(0, Math.floor(sec));
-        return `${String(Math.floor(s / 3600)).padStart(2, '0')}h ${String(
-          Math.floor((s % 3600) / 60)
-        ).padStart(2, '0')}m`;
-      };
-
-      function playCabinAlert(level = 'warn30') {
-        try {
-          const AudioCtx = window.AudioContext || window.webkitAudioContext;
-          if (!AudioCtx) return;
-          const ctx = new AudioCtx();
-          const patterns = {
-            warn30: [{ f: 740, d: 0.22, t: 0 }],
-            warn15: [{ f: 880, d: 0.2, t: 0 }, { f: 880, d: 0.25, t: 0.28 }],
-            limit430: [{ f: 987, d: 0.22, t: 0 }, { f: 784, d: 0.22, t: 0.26 }, { f: 987, d: 0.35, t: 0.52 }],
-            breakDone: [{ f: 523, d: 0.16, t: 0 }, { f: 659, d: 0.16, t: 0.18 }, { f: 784, d: 0.28, t: 0.36 }],
-          };
-          const base = ctx.currentTime;
-          (patterns[level] || patterns.warn30).forEach(({ f, d, t }) => {
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(f, base + t);
-            gain.gain.setValueAtTime(0.001, base + t);
-            gain.gain.exponentialRampToValueAtTime(0.28, base + t + 0.02);
-            gain.gain.exponentialRampToValueAtTime(0.001, base + t + d);
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.start(base + t);
-            osc.stop(base + t + d + 0.02);
-          });
-          setTimeout(() => ctx.close().catch(() => {}), 1500);
-        } catch {}
-      }
-
-      // ==========================================
-      // UTILS MÓDULO 4 (SCANNER CMR + PDF)
+      // UTILS SCANNER CMR + PDF
       // ==========================================
       function buildCmrFileName(dateStr, loadNumber) {
         const safeDate = /^\d{4}-\d{2}-\d{2}$/.test(dateStr || '')
@@ -308,9 +223,6 @@
       );
       const WalletIcon = ({ className }) => (
         <Icon className={className}><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" /><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" /></Icon>
-      );
-      const TimerIcon = ({ className }) => (
-        <Icon className={className}><line x1="10" x2="14" y1="2" y2="2" /><line x1="12" x2="15" y1="14" y2="11" /><circle cx="12" cy="14" r="8" /></Icon>
       );
       const ContainerIcon = ({ className }) => (
         <Icon className={className}><path d="M22 7.7c0-.6-.4-1.2-.8-1.5l-6.3-3.9a1.72 1.72 0 0 0-1.7 0l-10.3 6c-.5.2-.9.8-.9 1.4v6.6c0 .5.4 1.2.8 1.5l6.3 3.9a1.72 1.72 0 0 0 1.7 0l10.3-6c.5-.3.9-1 .9-1.5Z" /><path d="M10 21.9V14L2.1 9.1" /><path d="m10 14 11.9-6.9" /></Icon>
@@ -485,188 +397,7 @@
       }
 
       // ==========================================
-      // MÓDULO 2: TACÓGRAFO (CE 561/2006)
-      // ==========================================
-      function TachographPreview() {
-        const [tacho, setTacho] = useState(() => {
-          try {
-            const raw = JSON.parse(localStorage.getItem(TACHO_STORAGE_KEY) || 'null');
-            const base = { ...createInitialTachoState(), ...(raw || {}) };
-            if (base.weekMondayISO !== getCurrentMondayISO()) {
-              base.weekMondayISO = getCurrentMondayISO();
-              base.weekly10hExtensionsUsed = 0;
-              base.weeklyReducedRestsUsed = 0;
-            }
-            return base;
-          } catch {
-            return createInitialTachoState();
-          }
-        });
-        const [restHours, setRestHours] = useState(11);
-
-        useEffect(() => {
-          localStorage.setItem(TACHO_STORAGE_KEY, JSON.stringify(tacho));
-        }, [tacho]);
-
-        useEffect(() => {
-          if (tacho.status === 'idle') return;
-          const id = setInterval(() => {
-            setTacho((prev) => {
-              const next = { ...prev, alertsFired: { ...prev.alertsFired }, lastUpdatedAt: Date.now() };
-              if (next.status === 'driving') {
-                next.continuousDriveSeconds += 1;
-                next.dailyDriveSeconds += 1;
-                if (next.continuousDriveSeconds >= ALERT_30M_LEFT_SEC && !next.alertsFired.min30) {
-                  next.alertsFired.min30 = true;
-                  if (next.soundEnabled) playCabinAlert('warn30');
-                }
-                if (next.continuousDriveSeconds >= ALERT_15M_LEFT_SEC && !next.alertsFired.min15) {
-                  next.alertsFired.min15 = true;
-                  if (next.soundEnabled) playCabinAlert('warn15');
-                }
-                if (next.continuousDriveSeconds >= CONTINUOUS_LIMIT_SEC && !next.alertsFired.limit430) {
-                  next.alertsFired.limit430 = true;
-                  if (next.soundEnabled) playCabinAlert('limit430');
-                }
-              } else if (next.status === 'break') {
-                next.currentBreakSeconds += 1;
-                const req = next.firstSplitBreakDone ? BREAK_SPLIT_2_SEC : BREAK_FULL_SEC;
-                if (next.currentBreakSeconds >= req && !next.alertsFired.breakDone) {
-                  next.alertsFired.breakDone = true;
-                  next.continuousDriveSeconds = 0;
-                  next.firstSplitBreakDone = false;
-                  next.alertsFired.min30 = false;
-                  next.alertsFired.min15 = false;
-                  next.alertsFired.limit430 = false;
-                  next.lastNotice = 'Pausa concluída! Condução contínua zerada.';
-                  if (next.soundEnabled) playCabinAlert('breakDone');
-                }
-              } else if (next.status === 'resting') {
-                next.dailyRestSeconds += 1;
-              }
-              return next;
-            });
-          }, 1000);
-          return () => clearInterval(id);
-        }, [tacho.status]);
-
-        const remainingContinuous = Math.max(0, CONTINUOUS_LIMIT_SEC - tacho.continuousDriveSeconds);
-        const isWarn30 = tacho.continuousDriveSeconds >= ALERT_30M_LEFT_SEC && tacho.continuousDriveSeconds < ALERT_15M_LEFT_SEC;
-        const isWarn15 = tacho.continuousDriveSeconds >= ALERT_15M_LEFT_SEC && tacho.continuousDriveSeconds < CONTINUOUS_LIMIT_SEC;
-        const isLimit = tacho.continuousDriveSeconds >= CONTINUOUS_LIMIT_SEC;
-        const dailyLimitSec = tacho.dailyExtendedTo10h ? DAILY_LIMIT_10H_SEC : DAILY_LIMIT_9H_SEC;
-
-        return (
-          <div className="space-y-4">
-            {(isWarn30 || isWarn15 || isLimit) && (
-              <div className={`rounded-2xl border p-4 ${isLimit || isWarn15 ? 'border-rose-500 bg-rose-500/20 text-rose-100' : 'border-amber-500 bg-amber-500/15 text-amber-100'}`}>
-                <p className="text-sm font-black">
-                  {isLimit ? 'LIMITE 04:30:00 ATINGIDO — PARE!' : isWarn15 ? 'ALERTA 04:15:00 — 15 MIN RESTANTES!' : 'AVISO 04:00:00 — 30 MIN RESTANTES'}
-                </p>
-              </div>
-            )}
-
-            <section className="rounded-3xl border border-slate-800 bg-slate-900 p-5 text-center shadow-xl">
-              <div className="flex items-center justify-between text-xs font-bold uppercase text-slate-400">
-                <span>{tacho.status === 'driving' ? 'Conduzindo' : tacho.status === 'break' ? 'Em Pausa' : tacho.status === 'resting' ? `Descanso ${tacho.dailyRestTargetHours}h` : 'Em Espera'}</span>
-                <button type="button" onClick={() => setTacho((p) => ({ ...p, soundEnabled: !p.soundEnabled }))} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-1.5 text-slate-200">
-                  {tacho.soundEnabled ? '🔊 Som ON' : '🔇 Mudo'}
-                </button>
-              </div>
-
-              {tacho.status === 'break' ? (
-                <>
-                  <p className="mt-3 text-xs font-bold uppercase text-emerald-300">{tacho.firstSplitBreakDone ? '2.ª Fração (Meta 30:00)' : 'Pausa (Meta 45:00 ou 15:00)'}</p>
-                  <p className="tabular-nums mt-1 text-5xl font-black text-emerald-400">{formatHMS(tacho.currentBreakSeconds)}</p>
-                </>
-              ) : (
-                <>
-                  <p className="mt-3 text-xs font-bold uppercase text-slate-400">Restante Bloco 04:30:00</p>
-                  <p className={`tabular-nums mt-1 text-5xl font-black ${isLimit || isWarn15 ? 'text-rose-400' : isWarn30 ? 'text-amber-400' : 'text-slate-50'}`}>{formatHMS(remainingContinuous)}</p>
-                  <p className="tabular-nums mt-1 text-xs text-slate-400">Conduzido: {formatHMS(tacho.continuousDriveSeconds)}</p>
-                </>
-              )}
-
-              <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                <button type="button" onClick={() => setTacho((p) => {
-                  if (p.status === 'break' && !p.alertsFired.breakDone) {
-                    if (p.currentBreakSeconds >= BREAK_FULL_SEC) return { ...p, status: 'driving', continuousDriveSeconds: 0, firstSplitBreakDone: false, currentBreakSeconds: 0, lastNotice: 'Pausa 45m válida!' };
-                    if (p.firstSplitBreakDone && p.currentBreakSeconds >= BREAK_SPLIT_2_SEC) return { ...p, status: 'driving', continuousDriveSeconds: 0, firstSplitBreakDone: false, currentBreakSeconds: 0, lastNotice: 'Pausa 30m válida!' };
-                    if (!p.firstSplitBreakDone && p.currentBreakSeconds >= BREAK_SPLIT_1_SEC) return { ...p, status: 'driving', firstSplitBreakDone: true, currentBreakSeconds: 0, lastNotice: '1.ª fração 15m registrada! Próxima exige 30m.' };
-                  }
-                  return { ...p, status: 'driving', currentBreakSeconds: 0, alertsFired: { ...p.alertsFired, breakDone: false }, lastNotice: 'Condução iniciada.' };
-                })} className="min-h-[56px] rounded-2xl bg-amber-500 px-3 text-sm font-black text-slate-950">▶ Iniciar Condução</button>
-
-                <button type="button" onClick={() => setTacho((p) => ({ ...p, status: 'break', currentBreakSeconds: 0, alertsFired: { ...p.alertsFired, breakDone: false }, lastNotice: p.firstSplitBreakDone ? 'Pausa iniciada (exige 30 min).' : 'Pausa iniciada (45m ou 15m).' }))} className="min-h-[56px] rounded-2xl border border-emerald-500/40 bg-emerald-500/15 px-3 text-sm font-black text-emerald-300">☕ Iniciar Pausa</button>
-
-                <button type="button" onClick={() => setTacho((p) => ({
-                  ...p,
-                  status: 'resting',
-                  continuousDriveSeconds: 0,
-                  dailyDriveSeconds: 0,
-                  dailyExtendedTo10h: false,
-                  dailyRestSeconds: 0,
-                  dailyRestTargetHours: restHours,
-                  weeklyReducedRestsUsed: restHours === 9 ? Math.min(3, p.weeklyReducedRestsUsed + 1) : p.weeklyReducedRestsUsed,
-                  lastNotice: `Fim de jornada · Descanso ${restHours}h iniciado.`
-                }))} className="min-h-[56px] rounded-2xl border border-sky-500/40 bg-sky-500/15 px-3 text-sm font-black text-sky-300">🌙 Fim de Jornada</button>
-              </div>
-              {tacho.lastNotice && <p className="mt-3 rounded-xl bg-slate-950 p-3 text-xs text-slate-300">{tacho.lastNotice}</p>}
-            </section>
-
-            {/* Pausa rápida 15m / 30m / 45m */}
-            <section className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-              <div className="mb-2 flex justify-between text-xs font-bold">
-                <span>Pausa Fracionada (15m + 30m) ou 45m</span>
-                {tacho.firstSplitBreakDone && <span className="text-emerald-400">✓ 15m feito (falta 30m)</span>}
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <button type="button" onClick={() => setTacho((p) => ({ ...p, status: 'idle', firstSplitBreakDone: true, lastNotice: '1.ª fração de 15 min validada! Falta 30 min.' }))} className="min-h-[48px] rounded-xl border border-slate-700 bg-slate-950 text-xs font-bold">15 min (1.ª)</button>
-                <button type="button" onClick={() => setTacho((p) => p.firstSplitBreakDone ? { ...p, status: 'idle', continuousDriveSeconds: 0, firstSplitBreakDone: false, alertsFired: { min30: false, min15: false, limit430: false, breakDone: false }, lastNotice: '2.ª fração 30 min validada! Zerado.' } : { ...p, lastNotice: 'Faça 15 min primeiro ou 45 min direto.' })} className="min-h-[48px] rounded-xl border border-slate-700 bg-slate-950 text-xs font-bold">30 min (2.ª)</button>
-                <button type="button" onClick={() => setTacho((p) => ({ ...p, status: 'idle', continuousDriveSeconds: 0, firstSplitBreakDone: false, alertsFired: { min30: false, min15: false, limit430: false, breakDone: false }, lastNotice: 'Pausa completa de 45 min! Zerado.' }))} className="min-h-[48px] rounded-xl border border-emerald-500/40 bg-emerald-500/15 text-xs font-bold text-emerald-300">45 min (Full)</button>
-              </div>
-            </section>
-
-            {/* Diária + Reduzido + Simulação */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-                <div className="flex justify-between text-xs font-bold text-slate-400">
-                  <span>Diária ({tacho.dailyExtendedTo10h ? '10h' : '9h'})</span>
-                  <span className="text-amber-300">Ext 10h: {tacho.weekly10hExtensionsUsed}/2</span>
-                </div>
-                <p className="tabular-nums mt-1 text-xl font-black">{formatHM(tacho.dailyDriveSeconds)} / {formatHM(dailyLimitSec)}</p>
-                <button type="button" onClick={() => setTacho((p) => {
-                  if (p.dailyExtendedTo10h) return { ...p, dailyExtendedTo10h: false, weekly10hExtensionsUsed: Math.max(0, p.weekly10hExtensionsUsed - 1) };
-                  if (p.weekly10hExtensionsUsed >= 2) return { ...p, lastNotice: 'Máximo de 2 extensões de 10h na semana atingido.' };
-                  return { ...p, dailyExtendedTo10h: true, weekly10hExtensionsUsed: p.weekly10hExtensionsUsed + 1 };
-                })} className="mt-3 min-h-[46px] w-full rounded-xl border border-slate-700 bg-slate-950 text-xs font-bold">
-                  {tacho.dailyExtendedTo10h ? 'Reverter 10h' : 'Ativar Extensão 10h'}
-                </button>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-                <div className="flex justify-between text-xs font-bold text-slate-400">
-                  <span>Descanso Reduzido 9h</span>
-                  <span className="text-sky-300">Semana: {tacho.weeklyReducedRestsUsed}/3</span>
-                </div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => setRestHours(11)} className={`min-h-[46px] rounded-xl border text-xs font-bold ${restHours === 11 ? 'border-sky-500 bg-sky-500/20 text-sky-200' : 'border-slate-700 bg-slate-950'}`}>11h Regular</button>
-                  <button type="button" onClick={() => setRestHours(9)} className={`min-h-[46px] rounded-xl border text-xs font-bold ${restHours === 9 ? 'border-amber-500 bg-amber-500/20 text-amber-200' : 'border-slate-700 bg-slate-950'}`}>9h Reduzido</button>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-800 bg-slate-900 p-3">
-              <button type="button" onClick={() => { playCabinAlert('warn30'); setTacho((p) => ({ ...p, status: 'driving', continuousDriveSeconds: ALERT_30M_LEFT_SEC, alertsFired: { ...p.alertsFired, min30: true } })); }} className="min-h-[44px] rounded-xl bg-amber-500/15 text-xs font-bold text-amber-300">Testar 04:00</button>
-              <button type="button" onClick={() => { playCabinAlert('warn15'); setTacho((p) => ({ ...p, status: 'driving', continuousDriveSeconds: ALERT_15M_LEFT_SEC, alertsFired: { ...p.alertsFired, min30: true, min15: true } })); }} className="min-h-[44px] rounded-xl bg-rose-500/15 text-xs font-bold text-rose-300">Testar 04:15</button>
-              <button type="button" onClick={() => setTacho(createInitialTachoState())} className="min-h-[44px] rounded-xl bg-slate-800 text-xs font-bold text-slate-300">Zerar Tudo</button>
-            </div>
-          </div>
-        );
-      }
-
-      // ==========================================
-      // MÓDULO 3: CHECKLIST DE REBOQUE
+      // CHECKLIST DE REBOQUE
       // ==========================================
       function TrailerPreview() {
         const [records, setRecords] = useState(() => {
@@ -945,7 +676,7 @@
                   </div>
                   <div>
                     <h1 className="text-base font-extrabold">TruckFlow <span className="text-amber-400">EU</span></h1>
-                    <p className="text-xs font-medium text-emerald-400">Módulos 1 a 4 Ativos</p>
+                    <p className="text-xs font-medium text-emerald-400">Salário, Reboque e CMR</p>
                   </div>
                 </div>
                 <span className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-300">PWA Cabine</span>
@@ -1027,16 +758,14 @@
                 </div>
               )}
 
-              {activeTab === 'tachograph' && <TachographPreview />}
               {activeTab === 'trailer' && <TrailerPreview />}
               {activeTab === 'cmr' && <CmrPreview />}
             </main>
 
             <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-800 bg-slate-950/95 backdrop-blur-lg">
-              <div className="mx-auto grid max-w-2xl grid-cols-4 gap-1 px-2 py-1.5">
+              <div className="mx-auto grid max-w-2xl grid-cols-3 gap-1 px-2 py-1.5">
                 {[
                   { id: 'dashboard', label: 'Salário / KM', IconComp: WalletIcon },
-                  { id: 'tachograph', label: 'Tacógrafo', IconComp: TimerIcon },
                   { id: 'trailer', label: 'Reboque', IconComp: ContainerIcon },
                   { id: 'cmr', label: 'CMR PDF', IconComp: ScanIcon },
                 ].map(({ id, label, IconComp }) => (

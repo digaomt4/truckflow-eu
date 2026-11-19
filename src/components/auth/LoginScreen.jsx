@@ -22,7 +22,7 @@ function translateAuthError(err) {
     case 'auth/invalid-email':
       return 'Formato de email inválido.';
     case 'auth/email-already-in-use':
-      return 'Este email já possui conta. Toque em "Já tem conta? Entrar".';
+      return 'Este email já possui conta. Toque em "Já tem conta? Iniciar sessão".';
     case 'auth/weak-password':
       return 'A senha precisa ter pelo menos 6 caracteres.';
     case 'auth/popup-closed-by-user':
@@ -77,64 +77,63 @@ export default function LoginScreen({ onContinueOffline, isOnline }) {
   return (
     <div className="flex min-h-dvh flex-col justify-center bg-[var(--ios-bg)] px-4 py-8 text-[var(--ios-label)]">
       <div className="mx-auto w-full max-w-md space-y-6">
-        {/* Ícone App Store / Apple ID style */}
+        {/* Identidade Clean Professional */}
         <div className="text-center">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[22px] bg-[var(--ios-blue)] text-white shadow-lg">
-            <Truck className="h-10 w-10" aria-hidden="true" />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--ios-blue)] text-white shadow-md">
+            <Truck className="h-8 w-8" strokeWidth={2} aria-hidden="true" />
           </div>
-          <h1 className="mt-4 text-[28px] font-bold tracking-tight">
+          <h1 className="mt-4 text-[26px] font-bold tracking-tight text-[var(--ios-label)]">
             TruckFlow <span className="text-[var(--ios-blue)]">EU</span>
           </h1>
-          <p className="mt-1 text-[15px] text-[var(--ios-label-secondary)]">
-            Inicie sessão para sincronizar seus turnos
+          <p className="mt-1 text-[14px] text-[var(--ios-label-secondary)]">
+            Inicie sessão para sincronizar turnos, reboques, CMRs e despesas
           </p>
         </div>
 
-        {isFirebaseConfigured ? (
-          <div className="space-y-4">
-            {/* Botão Google estilo iOS */}
-            <button
-              type="button"
-              disabled={loading}
-              onClick={handleGoogleLogin}
-              className="ios-card flex min-h-[54px] w-full items-center justify-center gap-3 px-4 text-[16px] font-semibold text-[var(--ios-label)] transition active:scale-[0.98] disabled:opacity-60"
-            >
-              {loading ? (
-                <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-              ) : (
-                <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    fill="#4285F4"
-                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"
-                  />
-                </svg>
-              )}
-              Continuar com Google
-            </button>
+        <div className="ios-card p-5 sm:p-6">
+          {isFirebaseConfigured ? (
+            <div className="space-y-4">
+              {/* Botão Google Clean */}
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleGoogleLogin}
+                className="flex min-h-[50px] w-full items-center justify-center gap-3 rounded-xl border ios-sep-border bg-[var(--ios-card)] px-4 text-[15px] font-semibold text-[var(--ios-label)] shadow-sm transition hover:bg-[var(--ios-fill)] active:scale-[0.99] disabled:opacity-60"
+              >
+                {loading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      fill="#4285F4"
+                      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"
+                    />
+                  </svg>
+                )}
+                Continuar com Google
+              </button>
 
-            <div className="flex items-center gap-3 px-2 text-xs font-medium text-[var(--ios-label-secondary)]">
-              <div className="h-px flex-1 border-b ios-sep-border" />
-              <span>ou por Email</span>
-              <div className="h-px flex-1 border-b ios-sep-border" />
-            </div>
+              <div className="flex items-center gap-3 text-xs font-medium text-[var(--ios-label-secondary)]">
+                <div className="h-px flex-1 border-b ios-sep-border" />
+                <span>ou por Email</span>
+                <div className="h-px flex-1 border-b ios-sep-border" />
+              </div>
 
-            {/* Bloco Inset Grouped com linha divisória interna */}
-            <form onSubmit={handleEmailSubmit} className="space-y-4">
-              <div className="ios-card overflow-hidden">
-                <label className="flex min-h-[54px] items-center gap-3 border-b ios-sep-border px-4">
-                  <span className="w-16 shrink-0 text-[15px] font-medium text-[var(--ios-label-secondary)]">
+              <form onSubmit={handleEmailSubmit} className="space-y-3.5">
+                <label className="block space-y-1.5">
+                  <span className="block text-[12px] font-semibold uppercase tracking-wide text-[var(--ios-label-secondary)]">
                     Email
                   </span>
                   <input
@@ -147,12 +146,12 @@ export default function LoginScreen({ onContinueOffline, isOnline }) {
                       setError('');
                     }}
                     placeholder="motorista@empresa.eu"
-                    className="w-full bg-transparent text-[16px] text-[var(--ios-label)] outline-none placeholder:text-[var(--ios-label-tertiary)]"
+                    className="ios-input min-h-[48px] w-full px-3.5 text-[15px]"
                   />
                 </label>
 
-                <label className="flex min-h-[54px] items-center gap-3 px-4">
-                  <span className="w-16 shrink-0 text-[15px] font-medium text-[var(--ios-label-secondary)]">
+                <label className="block space-y-1.5">
+                  <span className="block text-[12px] font-semibold uppercase tracking-wide text-[var(--ios-label-secondary)]">
                     Senha
                   </span>
                   <input
@@ -168,62 +167,62 @@ export default function LoginScreen({ onContinueOffline, isOnline }) {
                       setError('');
                     }}
                     placeholder="Mínimo 6 caracteres"
-                    className="w-full bg-transparent text-[16px] text-[var(--ios-label)] outline-none placeholder:text-[var(--ios-label-tertiary)]"
+                    className="ios-input min-h-[48px] w-full px-3.5 text-[15px]"
                   />
                 </label>
-              </div>
 
-              {error && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-[14px] bg-[var(--ios-red)]/15 p-3.5 text-[13px] font-medium text-[var(--ios-red)]"
+                {error && (
+                  <div
+                    role="alert"
+                    className="flex items-start gap-2 rounded-xl border border-[var(--ios-red)]/25 bg-[var(--ios-red)]/10 p-3 text-[13px] font-medium text-[var(--ios-red)]"
+                  >
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="min-h-[50px] w-full rounded-xl bg-[var(--ios-blue)] px-4 text-[15px] font-semibold text-white shadow-sm transition hover:bg-[var(--ios-blue-hover)] active:scale-[0.99] disabled:opacity-60"
                 >
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                  <span>{error}</span>
-                </div>
-              )}
+                  {loading
+                    ? 'A iniciar sessão...'
+                    : mode === 'login'
+                    ? 'Iniciar Sessão'
+                    : 'Criar Conta'}
+                </button>
+              </form>
 
               <button
-                type="submit"
+                type="button"
                 disabled={loading}
-                className="min-h-[54px] w-full rounded-[14px] bg-[var(--ios-blue)] px-4 text-[17px] font-semibold text-white transition active:scale-[0.98] disabled:opacity-60"
+                onClick={() => {
+                  setError('');
+                  setMode((prev) => (prev === 'login' ? 'register' : 'login'));
+                }}
+                className="min-h-[40px] w-full text-center text-[14px] font-semibold text-[var(--ios-blue)] hover:underline"
               >
-                {loading
-                  ? 'A iniciar sessão...'
-                  : mode === 'login'
-                  ? 'Iniciar Sessão'
-                  : 'Criar Conta'}
+                {mode === 'login'
+                  ? 'Criar nova conta gratuita'
+                  : 'Já tem conta? Iniciar sessão'}
               </button>
-            </form>
-
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => {
-                setError('');
-                setMode((prev) => (prev === 'login' ? 'register' : 'login'));
-              }}
-              className="min-h-[44px] w-full text-center text-[15px] font-medium text-[var(--ios-blue)]"
-            >
-              {mode === 'login'
-                ? 'Criar nova conta gratuita'
-                : 'Já tem conta? Iniciar sessão'}
-            </button>
-          </div>
-        ) : (
-          <div className="ios-card p-4 text-center text-sm text-[var(--ios-label-secondary)]">
-            Firebase não configurado neste ambiente. Utilize o modo offline abaixo.
-          </div>
-        )}
+            </div>
+          ) : (
+            <div className="py-2 text-center text-sm text-[var(--ios-label-secondary)]">
+              Firebase não configurado neste ambiente. Utilize o modo offline abaixo.
+            </div>
+          )}
+        </div>
 
         {/* Botão Modo Offline */}
-        <div className="pt-2 text-center">
+        <div className="text-center">
           <button
             type="button"
             onClick={onContinueOffline}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full px-4 text-[13px] font-medium text-[var(--ios-label-secondary)] transition active:opacity-60"
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border ios-sep-border bg-[var(--ios-card)] px-4 text-[13px] font-semibold text-[var(--ios-label-secondary)] shadow-sm transition hover:text-[var(--ios-label)] active:scale-95"
           >
-            <WifiOff className="h-4 w-4" aria-hidden="true" />
+            <WifiOff className="h-4 w-4 text-[var(--ios-orange)]" aria-hidden="true" />
             {isOnline
               ? 'Usar apenas neste aparelho (Offline)'
               : 'Sem internet · Usar apenas neste aparelho'}

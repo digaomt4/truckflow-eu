@@ -9,15 +9,27 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebase';
+import {
+  BASE_SALARY,
+  KM_THRESHOLD,
+  RATE_BONUS,
+  RATE_STANDARD,
+  WEEKEND_BONUS_VALUE,
+} from '../utils/salaryCalculator';
 
 const SHIFTS_STORAGE_KEY = 'truckflow_shifts_v1';
 const SETTINGS_STORAGE_KEY = 'truckflow_settings_v1';
 
-const DEFAULT_SETTINGS = {
-  retroactiveBonus: true, // Padrão: Aplicar 0,12€ retroativo a todo o mês ao cruzar 16.000 km
+export const DEFAULT_SETTINGS = {
+  retroactiveBonus: true, // Padrão: Aplicar tarifa bônus retroativa ao cruzar a meta
   extraWeekendsByMonth: {}, // Ajustes rápidos manuais por mês (ex: { "2026-11": 1 })
   initialOdometer: 0, // Quilômetro inicial base do odômetro do caminhão
-  theme: 'dark', // 'dark' | 'light'
+  theme: 'light', // 'light' | 'dark'
+  baseSalary: BASE_SALARY,
+  kmThreshold: KM_THRESHOLD,
+  rateStandard: RATE_STANDARD,
+  rateBonus: RATE_BONUS,
+  weekendBonusValue: WEEKEND_BONUS_VALUE,
 };
 
 function readLocalShifts() {
@@ -39,16 +51,27 @@ function writeLocalShifts(shifts) {
   }
 }
 
+function toNonNegative(val, fallback) {
+  const num = Number(val);
+  return Number.isFinite(num) && num >= 0 ? num : fallback;
+}
+
 function normalizeSettings(raw) {
-  const initialOdometer = Math.max(0, Number(raw?.initialOdometer) || 0);
-  const theme = raw?.theme === 'light' ? 'light' : 'dark';
+  const initialOdometer = Math.round(toNonNegative(raw?.initialOdometer, 0));
+  const theme = raw?.theme === 'dark' ? 'dark' : 'light';
   return {
-    ...DEFAULT_SETTINGS,
-    ...(raw || {}),
     retroactiveBonus: raw?.retroactiveBonus !== false,
     extraWeekendsByMonth: raw?.extraWeekendsByMonth || {},
     initialOdometer,
     theme,
+    baseSalary: toNonNegative(raw?.baseSalary, BASE_SALARY),
+    kmThreshold: Math.round(toNonNegative(raw?.kmThreshold, KM_THRESHOLD)),
+    rateStandard: toNonNegative(raw?.rateStandard, RATE_STANDARD),
+    rateBonus: toNonNegative(raw?.rateBonus, RATE_BONUS),
+    weekendBonusValue: toNonNegative(
+      raw?.weekendBonusValue,
+      WEEKEND_BONUS_VALUE
+    ),
   };
 }
 

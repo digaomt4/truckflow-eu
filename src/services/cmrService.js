@@ -9,6 +9,11 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebase';
 import { buildCmrFileName } from '../utils/cmrScanner';
+import {
+  deleteMediaAsset,
+  resolveMediaAsset,
+  saveMediaAsset,
+} from './mediaStorage';
 
 const CMRS_STORAGE_KEY = 'truckflow_cmrs_v1';
 const MAX_LOCAL_HISTORY = 15;
@@ -31,9 +36,9 @@ function writeLocalCmrs(records) {
       JSON.stringify(records.slice(0, MAX_LOCAL_HISTORY))
     );
   } catch (err) {
-    // Se exceder espaço por causa da imagem base64, guarda mantendo apenas a miniatura nos antigos
+    // Se exceder espaço por causa da imagem base64, guarda mantendo miniaturas/chaves de mídia
     try {
-      const trimmed = records.slice(0, 6).map((item, idx) =>
+      const trimmed = records.slice(0, 8).map((item, idx) =>
         idx === 0 ? item : { ...item, scanDataUrl: '' }
       );
       localStorage.setItem(CMRS_STORAGE_KEY, JSON.stringify(trimmed));
@@ -79,7 +84,11 @@ export function subscribeCmrRecords(userId, callback) {
         const currentLocal = readLocalCmrs();
         if (remote.length === 0 && currentLocal.length > 0) {
           currentLocal.forEach((rec) => {
-            setDoc(doc(db, 'users', userId, 'cmrs', rec.id), rec, {
+            const payload =
+              (rec.scanDataUrl || '').length < 450000
+                ? rec
+                : { ...rec, scanDataUrl: '' };
+            setDoc(doc(db, 'users', userId, 'cmrs', rec.id), payload, {
               merge: true,
             }).catch(() => {});
           });
@@ -98,15 +107,56 @@ export async function saveCmrRecord(userId, cmrData) {
   const id = cmrData.id || createCmrId();
   const fileName = buildCmrFileName(cmrData.date, cmrData.loadNumber);
 
+  const rawPages = Array.isArray(cmrData.pages) && cmrData.pages.length > 0
+    ? cmrData.pages.slice(0, 10)
+    : cmrData.scanDataUrl
+    ? [
+        {
+          id: 'p_0',
+          scanDataUrl: cmrData.scanDataUrl,
+          thumbDataUrl: cmrData.thumbDataUrl || '',
+        },
+      ]
+    : [];
+
+  const savedPages = [];
+  for (let i = 0; i < rawPages.length; i += 1) {
+    const page = rawPages[i];
+    const pId = String(page.id || `p_${i}`).slice(0, 64);
+    const asset = await saveMediaAsset(
+      userId,
+      `cmrs/${id}_p${i}`,
+      page.scanDataUrl || page.thumbDataUrl || ''
+    );
+    const thumb = String(page.thumbDataUrl || '');
+    savedPages.push({
+      id: pId,
+      thumbDataUrl: thumb.length <= 75000 ? thumb : '',
+      mediaKey: asset.mediaKey,
+      url: asset.url,
+    });
+  }
+
+  const firstPage = rawPages[0] || {};
+  const firstSaved = savedPages[0] || {};
+  const firstThumb = String(
+    cmrData.thumbDataUrl || firstPage.thumbDataUrl || ''
+  );
+  const firstScan = String(cmrData.scanDataUrl || firstPage.scanDataUrl || '');
+
   const normalized = {
     id,
-    date: cmrData.date,
-    loadNumber: String(cmrData.loadNumber || '').trim(),
-    fileName,
-    notes: String(cmrData.notes || '').trim(),
+    date: String(cmrData.date || '').slice(0, 10),
+    loadNumber: String(cmrData.loadNumber || '').trim().slice(0, 100),
+    fileName: fileName.slice(0, 150),
+    notes: String(cmrData.notes || '').trim().slice(0, 500),
     sizeKb: Number(cmrData.sizeKb) || 0,
-    thumbDataUrl: cmrData.thumbDataUrl || '',
-    scanDataUrl: cmrData.scanDataUrl || '',
+    pageCount: Math.max(1, Math.min(10, savedPages.length || 1)),
+    thumbDataUrl: firstThumb.length <= 145000 ? firstThumb : '',
+    scanDataUrl: firstScan,
+    scanMediaKey: (firstSaved.mediaKey || '').slice(0, 200),
+    scanUrl: (firstSaved.url || '').slice(0, 1000),
+    pages: savedPages,
     createdAt: cmrData.createdAt || new Date().toISOString(),
   };
 
@@ -118,9 +168,9 @@ export async function saveCmrRecord(userId, cmrData) {
   writeLocalCmrs(updated);
 
   if (isFirebaseConfigured && db && userId) {
-    // Limite de 1MB por documento Firestore: envia metadados + thumb (+ scan se < 450KB)
+    // Limite de 1MB por documento Firestore: envia scan inline apenas se página única < 450KB
     const firestorePayload =
-      normalized.scanDataUrl.length < 450000
+      normalized.pageCount === 1 && normalized.scanDataUrl.length < 450000
         ? normalized
         : { ...normalized, scanDataUrl: '' };
 
@@ -132,11 +182,52 @@ export async function saveCmrRecord(userId, cmrData) {
   return { record: normalized, records: updated };
 }
 
+/**
+ * Resolve todas as páginas em resolução completa (via IndexedDB, Storage ou fallback inline).
+ */
+export async function resolveCmrPages(record) {
+  if (!record) return [];
+
+  if (Array.isArray(record.pages) && record.pages.length > 0) {
+    const resolved = [];
+    for (let i = 0; i < record.pages.length; i += 1) {
+      const p = record.pages[i];
+      const src = await resolveMediaAsset({
+        mediaKey: p.mediaKey,
+        url: p.url,
+        fallbackDataUrl:
+          (i === 0 ? record.scanDataUrl : '') || p.thumbDataUrl || '',
+      });
+      if (src) resolved.push(src);
+    }
+    if (resolved.length > 0) return resolved;
+  }
+
+  const single = await resolveMediaAsset({
+    mediaKey: record.scanMediaKey,
+    url: record.scanUrl,
+    fallbackDataUrl: record.scanDataUrl || record.thumbDataUrl || '',
+  });
+  return single ? [single] : [];
+}
+
 export async function deleteCmrRecord(userId, recordId) {
-  const updated = sortDescending(
-    readLocalCmrs().filter((item) => item.id !== recordId)
-  );
+  const current = readLocalCmrs();
+  const target = current.find((item) => item.id === recordId);
+
+  const updated = sortDescending(current.filter((item) => item.id !== recordId));
   writeLocalCmrs(updated);
+
+  if (target) {
+    if (target.scanMediaKey) {
+      deleteMediaAsset(userId, target.scanMediaKey).catch(() => {});
+    }
+    if (Array.isArray(target.pages)) {
+      target.pages.forEach((p) => {
+        if (p?.mediaKey) deleteMediaAsset(userId, p.mediaKey).catch(() => {});
+      });
+    }
+  }
 
   if (isFirebaseConfigured && db && userId) {
     await deleteDoc(doc(db, 'users', userId, 'cmrs', recordId));

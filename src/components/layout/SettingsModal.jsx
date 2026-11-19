@@ -5,8 +5,17 @@ import {
   Moon,
   CheckCircle2,
   AlertCircle,
+  RotateCcw,
 } from 'lucide-react';
-import { formatKm } from '../../utils/salaryCalculator';
+import {
+  BASE_SALARY,
+  KM_THRESHOLD,
+  RATE_BONUS,
+  RATE_STANDARD,
+  WEEKEND_BONUS_VALUE,
+  formatKm,
+  formatRate,
+} from '../../utils/salaryCalculator';
 
 export default function SettingsModal({
   isOpen,
@@ -16,9 +25,16 @@ export default function SettingsModal({
 }) {
   const dialogRef = useRef(null);
   const [odometerInput, setOdometerInput] = useState('');
-  const [theme, setTheme] = useState(settings.theme === 'light' ? 'light' : 'dark');
+  const [theme, setTheme] = useState(settings.theme === 'dark' ? 'dark' : 'light');
   const [retroactiveBonus, setRetroactiveBonus] = useState(
     settings.retroactiveBonus !== false
+  );
+  const [baseSalaryInput, setBaseSalaryInput] = useState(String(BASE_SALARY));
+  const [kmThresholdInput, setKmThresholdInput] = useState(String(KM_THRESHOLD));
+  const [rateStandardInput, setRateStandardInput] = useState(String(RATE_STANDARD));
+  const [rateBonusInput, setRateBonusInput] = useState(String(RATE_BONUS));
+  const [weekendBonusInput, setWeekendBonusInput] = useState(
+    String(WEEKEND_BONUS_VALUE)
   );
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
@@ -30,8 +46,13 @@ export default function SettingsModal({
     setSavedMsg('');
     const currentOdo = Number(settings.initialOdometer) || 0;
     setOdometerInput(currentOdo > 0 ? String(currentOdo) : '');
-    setTheme(settings.theme === 'light' ? 'light' : 'dark');
+    setTheme(settings.theme === 'dark' ? 'dark' : 'light');
     setRetroactiveBonus(settings.retroactiveBonus !== false);
+    setBaseSalaryInput(String(settings.baseSalary ?? BASE_SALARY));
+    setKmThresholdInput(String(settings.kmThreshold ?? KM_THRESHOLD));
+    setRateStandardInput(String(settings.rateStandard ?? RATE_STANDARD));
+    setRateBonusInput(String(settings.rateBonus ?? RATE_BONUS));
+    setWeekendBonusInput(String(settings.weekendBonusValue ?? WEEKEND_BONUS_VALUE));
   }, [isOpen, settings]);
 
   useEffect(() => {
@@ -63,14 +84,72 @@ export default function SettingsModal({
     });
   };
 
+  const handleRestoreDefaults = () => {
+    setBaseSalaryInput(String(BASE_SALARY));
+    setKmThresholdInput(String(KM_THRESHOLD));
+    setRateStandardInput(String(RATE_STANDARD));
+    setRateBonusInput(String(RATE_BONUS));
+    setWeekendBonusInput(String(WEEKEND_BONUS_VALUE));
+    setError('');
+    setSavedMsg('');
+  };
+
+  const parsedThreshold = Number(kmThresholdInput);
+  const displayThreshold =
+    Number.isFinite(parsedThreshold) && parsedThreshold >= 0
+      ? Math.round(parsedThreshold)
+      : KM_THRESHOLD;
+  const parsedRateBonus = Number(rateBonusInput);
+  const displayRateBonus =
+    Number.isFinite(parsedRateBonus) && parsedRateBonus >= 0
+      ? parsedRateBonus
+      : RATE_BONUS;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSavedMsg('');
 
     const parsedOdo = odometerInput.trim() === '' ? 0 : Number(odometerInput);
+    const parsedBase = Number(baseSalaryInput);
+    const parsedMeta = Number(kmThresholdInput);
+    const parsedStd = Number(rateStandardInput);
+    const parsedBonus = Number(rateBonusInput);
+    const parsedFds = Number(weekendBonusInput);
+
     if (!Number.isFinite(parsedOdo) || parsedOdo < 0) {
       setError('Informe um valor válido de odômetro (0 ou maior).');
+      return;
+    }
+    if (
+      !Number.isFinite(parsedBase) ||
+      parsedBase < 0 ||
+      parsedBase > 100000
+    ) {
+      setError('Informe um ordenado base válido (entre 0 e 100.000 €).');
+      return;
+    }
+    if (
+      !Number.isFinite(parsedMeta) ||
+      parsedMeta < 0 ||
+      parsedMeta > 1000000
+    ) {
+      setError('Informe uma meta de KM válida (entre 0 e 1.000.000 km).');
+      return;
+    }
+    if (
+      !Number.isFinite(parsedStd) ||
+      parsedStd < 0 ||
+      parsedStd > 100 ||
+      !Number.isFinite(parsedBonus) ||
+      parsedBonus < 0 ||
+      parsedBonus > 100
+    ) {
+      setError('Informe tarifas por KM válidas.');
+      return;
+    }
+    if (!Number.isFinite(parsedFds) || parsedFds < 0 || parsedFds > 10000) {
+      setError('Informe um valor de fim de semana válido.');
       return;
     }
 
@@ -81,6 +160,11 @@ export default function SettingsModal({
         initialOdometer: Math.round(parsedOdo),
         theme,
         retroactiveBonus,
+        baseSalary: Math.round(parsedBase * 100) / 100,
+        kmThreshold: Math.round(parsedMeta),
+        rateStandard: Math.round(parsedStd * 1000) / 1000,
+        rateBonus: Math.round(parsedBonus * 1000) / 1000,
+        weekendBonusValue: Math.round(parsedFds * 100) / 100,
       });
       setSavedMsg('Ajustes salvos!');
       setTimeout(() => {
@@ -109,23 +193,22 @@ export default function SettingsModal({
       <div className="ios-sheet max-h-[92dvh] overflow-y-auto p-5">
         <div className="ios-grabber" />
 
-        {/* Cabeçalho estilo Ajustes do iPhone */}
-        <div className="mb-5 flex items-center justify-between">
+        <div className="mb-5 flex items-center justify-between border-b ios-sep-border pb-3">
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] text-[16px] font-medium text-[var(--ios-blue)]"
+            className="min-h-[40px] text-[15px] font-medium text-[var(--ios-label-secondary)] hover:text-[var(--ios-label)]"
           >
             Cancelar
           </button>
-          <h2 id="settings-modal-title" className="text-[17px] font-semibold">
+          <h2 id="settings-modal-title" className="text-[17px] font-bold">
             Ajustes
           </h2>
           <button
             type="button"
             disabled={saving}
             onClick={handleSubmit}
-            className="min-h-[44px] text-[16px] font-bold text-[var(--ios-blue)]"
+            className="min-h-[40px] text-[15px] font-bold text-[var(--ios-blue)]"
           >
             {saving ? 'Salvando...' : 'Salvar'}
           </button>
@@ -134,12 +217,12 @@ export default function SettingsModal({
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Seção 1: Odômetro Inicial */}
           <div>
-            <span className="mb-1.5 block px-3 text-[12px] font-medium uppercase tracking-wider text-[var(--ios-label-secondary)]">
+            <span className="mb-1.5 block px-1 text-[12px] font-semibold uppercase tracking-wider text-[var(--ios-label-secondary)]">
               Odômetro do Caminhão
             </span>
-            <div className="ios-fill rounded-[16px] p-4">
+            <div className="cp-inset p-3.5">
               <label className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-2 text-[15px] font-medium">
+                <span className="flex items-center gap-2 text-[14px] font-semibold">
                   <Gauge
                     className="h-5 w-5 text-[var(--ios-blue)]"
                     aria-hidden="true"
@@ -158,11 +241,11 @@ export default function SettingsModal({
                     setSavedMsg('');
                   }}
                   placeholder="Ex: 412500"
-                  className="tabular-nums w-40 bg-transparent text-right text-[20px] font-bold text-[var(--ios-label)] outline-none placeholder:text-[var(--ios-label-tertiary)]"
+                  className="tabular-nums w-40 rounded-lg border ios-sep-border bg-[var(--ios-card)] px-3 py-1.5 text-right text-[18px] font-bold text-[var(--ios-label)] outline-none focus:border-[var(--ios-blue)]"
                 />
               </label>
             </div>
-            <p className="mt-1.5 px-3 text-[12px] leading-relaxed text-[var(--ios-label-secondary)]">
+            <p className="mt-1.5 px-1 text-[12px] leading-relaxed text-[var(--ios-label-secondary)]">
               Define o quilômetro inicial para preencher automaticamente o 1.º
               turno na tela de início.
               {Number(settings.initialOdometer) > 0 && (
@@ -173,21 +256,12 @@ export default function SettingsModal({
             </p>
           </div>
 
-          {/* Seção 2: Aparência (Segmented Control iOS) */}
+          {/* Seção 2: Aparência */}
           <div>
-            <span className="mb-1.5 block px-3 text-[12px] font-medium uppercase tracking-wider text-[var(--ios-label-secondary)]">
+            <span className="mb-1.5 block px-1 text-[12px] font-semibold uppercase tracking-wider text-[var(--ios-label-secondary)]">
               Aparência
             </span>
             <div className="ios-segmented grid-cols-2">
-              <button
-                type="button"
-                aria-selected={theme === 'dark'}
-                onClick={() => handleSelectTheme('dark')}
-                className="ios-segmented-item flex items-center justify-center gap-2"
-              >
-                <Moon className="h-4 w-4" aria-hidden="true" />
-                Escuro
-              </button>
               <button
                 type="button"
                 aria-selected={theme === 'light'}
@@ -197,30 +271,129 @@ export default function SettingsModal({
                 <Sun className="h-4 w-4" aria-hidden="true" />
                 Claro
               </button>
+              <button
+                type="button"
+                aria-selected={theme === 'dark'}
+                onClick={() => handleSelectTheme('dark')}
+                className="ios-segmented-item flex items-center justify-center gap-2"
+              >
+                <Moon className="h-4 w-4" aria-hidden="true" />
+                Escuro
+              </button>
             </div>
           </div>
 
-          {/* Seção 3: Regra Salarial com Switch nativo do iPhone */}
+          {/* Seção 3: Parâmetros Salariais Configuráveis */}
           <div>
-            <span className="mb-1.5 block px-3 text-[12px] font-medium uppercase tracking-wider text-[var(--ios-label-secondary)]">
-              Cálculo Salarial (&gt; 16.000 km)
+            <div className="mb-1.5 flex items-center justify-between px-1">
+              <span className="text-[12px] font-semibold uppercase tracking-wider text-[var(--ios-label-secondary)]">
+                Parâmetros Salariais
+              </span>
+              <button
+                type="button"
+                onClick={handleRestoreDefaults}
+                className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--ios-blue)] hover:underline"
+              >
+                <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                Restaurar Padrão
+              </button>
+            </div>
+
+            <div className="cp-inset overflow-hidden">
+              <label className="flex min-h-[50px] items-center justify-between gap-3 border-b ios-sep-border px-4">
+                <span className="text-[14px] font-medium">Ordenado Base (€)</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="1"
+                  value={baseSalaryInput}
+                  onChange={(e) => setBaseSalaryInput(e.target.value)}
+                  className="tabular-nums w-28 bg-transparent text-right text-[16px] font-bold outline-none"
+                />
+              </label>
+
+              <label className="flex min-h-[50px] items-center justify-between gap-3 border-b ios-sep-border px-4">
+                <span className="text-[14px] font-medium">Meta Gatilho (KM)</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  step="100"
+                  value={kmThresholdInput}
+                  onChange={(e) => setKmThresholdInput(e.target.value)}
+                  className="tabular-nums w-28 bg-transparent text-right text-[16px] font-bold outline-none"
+                />
+              </label>
+
+              <label className="flex min-h-[50px] items-center justify-between gap-3 border-b ios-sep-border px-4">
+                <span className="text-[14px] font-medium">
+                  Tarifa até a Meta (€/km)
+                </span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={rateStandardInput}
+                  onChange={(e) => setRateStandardInput(e.target.value)}
+                  className="tabular-nums w-28 bg-transparent text-right text-[16px] font-bold outline-none"
+                />
+              </label>
+
+              <label className="flex min-h-[50px] items-center justify-between gap-3 border-b ios-sep-border px-4">
+                <span className="text-[14px] font-medium">
+                  Tarifa acima da Meta (€/km)
+                </span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={rateBonusInput}
+                  onChange={(e) => setRateBonusInput(e.target.value)}
+                  className="tabular-nums w-28 bg-transparent text-right text-[16px] font-bold outline-none"
+                />
+              </label>
+
+              <label className="flex min-h-[50px] items-center justify-between gap-3 px-4">
+                <span className="text-[14px] font-medium">
+                  Fim de Semana Fora (€)
+                </span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="5"
+                  value={weekendBonusInput}
+                  onChange={(e) => setWeekendBonusInput(e.target.value)}
+                  className="tabular-nums w-28 bg-transparent text-right text-[16px] font-bold outline-none"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Seção 4: Regra Salarial */}
+          <div>
+            <span className="mb-1.5 block px-1 text-[12px] font-semibold uppercase tracking-wider text-[var(--ios-label-secondary)]">
+              Cálculo Salarial (&gt; {formatKm(displayThreshold)} km)
             </span>
-            <div className="ios-fill flex items-center justify-between gap-3 rounded-[16px] p-4">
+            <div className="cp-inset flex items-center justify-between gap-3 p-4">
               <div className="space-y-0.5">
-                <p className="text-[15px] font-medium">
-                  0,12 € retroativo a todo o mês
+                <p className="text-[14px] font-semibold">
+                  {formatRate(displayRateBonus)} retroativo a todo o mês
                 </p>
                 <p className="text-[12px] text-[var(--ios-label-secondary)]">
                   {retroactiveBonus
-                    ? 'Todos os KM do mês sobem para 0,12 €'
-                    : 'Modo escalonado: 0,12 € apenas acima de 16k'}
+                    ? `Todos os KM do mês sobem para ${formatRate(displayRateBonus)}`
+                    : `Modo escalonado: ${formatRate(displayRateBonus)} apenas acima da meta`}
                 </p>
               </div>
               <button
                 type="button"
                 role="switch"
                 aria-checked={retroactiveBonus}
-                aria-label="Aplicar 0,12€ retroativo a todo o mês"
+                aria-label={`Aplicar ${formatRate(displayRateBonus)} retroativo a todo o mês`}
                 onClick={handleToggleRetroactive}
                 className="ios-switch"
               >
@@ -230,14 +403,14 @@ export default function SettingsModal({
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 rounded-[14px] bg-[var(--ios-red)]/15 p-3 text-[13px] font-medium text-[var(--ios-red)]">
+            <div className="flex items-center gap-2 rounded-xl border border-[var(--ios-red)]/25 bg-[var(--ios-red)]/10 p-3 text-[13px] font-medium text-[var(--ios-red)]">
               <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span>{error}</span>
             </div>
           )}
 
           {savedMsg && (
-            <div className="flex items-center gap-2 rounded-[14px] bg-[var(--ios-green)]/15 p-3 text-[13px] font-medium text-[var(--ios-green)]">
+            <div className="flex items-center gap-2 rounded-xl border border-[var(--ios-green)]/25 bg-[var(--ios-green)]/10 p-3 text-[13px] font-medium text-[var(--ios-green)]">
               <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span>{savedMsg}</span>
             </div>
@@ -246,7 +419,7 @@ export default function SettingsModal({
           <button
             type="submit"
             disabled={saving}
-            className="min-h-[52px] w-full rounded-[14px] bg-[var(--ios-blue)] px-4 text-[16px] font-semibold text-white transition active:scale-[0.98] disabled:opacity-50"
+            className="min-h-[50px] w-full rounded-xl bg-[var(--ios-blue)] px-4 text-[15px] font-semibold text-white shadow-sm transition hover:bg-[var(--ios-blue-hover)] active:scale-[0.99] disabled:opacity-50"
           >
             {saving ? 'Salvando...' : 'Confirmar Ajustes'}
           </button>

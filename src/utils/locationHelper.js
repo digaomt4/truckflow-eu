@@ -53,16 +53,23 @@ function formatNominatimAddress(data, lat, lon) {
     '';
   const countryCode = addr.country_code
     ? String(addr.country_code).toUpperCase()
-    : addr.country || '';
+    : '';
+  const countryLabel = countryCode || addr.country || '';
 
-  const parts = [street, city, countryCode].filter(Boolean);
+  const parts = [street, city, countryLabel].filter(Boolean);
   if (parts.length > 0) {
-    return parts.join(', ');
+    return { label: parts.join(', '), countryCode };
   }
   if (data?.display_name) {
-    return String(data.display_name).split(',').slice(0, 3).join(',').trim();
+    return {
+      label: String(data.display_name).split(',').slice(0, 3).join(',').trim(),
+      countryCode,
+    };
   }
-  return `GPS: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+  return {
+    label: `GPS: ${lat.toFixed(4)}, ${lon.toFixed(4)}`,
+    countryCode,
+  };
 }
 
 async function reverseGeocode(lat, lon) {
@@ -93,10 +100,13 @@ async function reverseGeocode(lat, lon) {
       const data = await res.json();
       const locality = data.locality || data.city || '';
       const area = data.principalSubdivision || '';
-      const country = data.countryCode || data.countryName || '';
+      const countryCode = data.countryCode
+        ? String(data.countryCode).toUpperCase()
+        : '';
+      const country = countryCode || data.countryName || '';
       const parts = [locality, area, country].filter(Boolean);
       if (parts.length > 0) {
-        return parts.join(', ');
+        return { label: parts.join(', '), countryCode };
       }
     }
   } catch {
@@ -104,7 +114,10 @@ async function reverseGeocode(lat, lon) {
   }
 
   // Fallback offline garantido com coordenadas exatas
-  return `GPS: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+  return {
+    label: `GPS: ${lat.toFixed(4)}, ${lon.toFixed(4)}`,
+    countryCode: '',
+  };
 }
 
 /**
@@ -121,9 +134,10 @@ export function fetchExactCurrentLocation() {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords;
-        const label = await reverseGeocode(latitude, longitude);
+        const { label, countryCode } = await reverseGeocode(latitude, longitude);
         resolve({
           label,
+          countryCode,
           latitude,
           longitude,
         });

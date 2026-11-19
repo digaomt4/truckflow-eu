@@ -12,6 +12,7 @@ import {
   getFirestore,
   enableIndexedDbPersistence,
 } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
@@ -35,6 +36,7 @@ export const isFirebaseConfigured = Boolean(
 let app = null;
 let auth = null;
 let db = null;
+let storage = null;
 let googleProvider = null;
 let persistenceStatus = isFirebaseConfigured ? 'pending' : 'local-only';
 
@@ -45,6 +47,13 @@ if (isFirebaseConfigured) {
   googleProvider.setCustomParameters({ prompt: 'select_account' });
 
   db = getFirestore(app);
+  if (firebaseConfig.storageBucket) {
+    try {
+      storage = getStorage(app);
+    } catch {
+      storage = null;
+    }
+  }
 
   // Ativa cache offline persistente do Cloud Firestore no IndexedDB
   enableIndexedDbPersistence(db)
@@ -113,4 +122,4 @@ export function subscribeToAuthChanges(callback) {
   return onAuthStateChanged(auth, callback);
 }
 
-export { app, auth, db, googleProvider };
+export { app, auth, db, storage, googleProvider };

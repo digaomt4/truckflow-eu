@@ -43,28 +43,13 @@ service cloud.firestore {
     //      - updatedAt: string (required, ISO 8601 timestamp, 19..40 chars)
     //      - initialOdometer: number (optional, >= 0, <= 100000000)
     //      - theme: string (optional, 'dark' | 'light')
+    //      - baseSalary: number (optional, >= 0, <= 100000)
+    //      - kmThreshold: number (optional, >= 0, <= 1000000)
+    //      - rateStandard: number (optional, >= 0, <= 100)
+    //      - rateBonus: number (optional, >= 0, <= 100)
+    //      - weekendBonusValue: number (optional, >= 0, <= 10000)
     //
-    // 3. Collection: /users/{userId}/tachograph/{docId}
-    //    Document ID: {docId} (e.g., 'state')
-    //    Fields:
-    //      - status: string (required, 'idle' | 'driving' | 'break' | 'resting')
-    //      - lastUpdatedAt: number (required, epoch ms >= 0, <= 9999999999999)
-    //      - continuousDriveSeconds: number (required, >= 0, <= 10000000)
-    //      - dailyDriveSeconds: number (required, >= 0, <= 10000000)
-    //      - dailyExtendedTo10h: bool (required)
-    //      - currentBreakSeconds: number (required, >= 0, <= 10000000)
-    //      - firstSplitBreakDone: bool (required)
-    //      - dailyRestSeconds: number (required, >= 0, <= 10000000)
-    //      - dailyRestTargetHours: number (required, >= 0, <= 168)
-    //      - weekMondayISO: string (required, YYYY-MM-DD, 10 chars)
-    //      - weekly10hExtensionsUsed: number (required, >= 0, <= 10)
-    //      - weeklyReducedRestsUsed: number (required, >= 0, <= 10)
-    //      - soundEnabled: bool (required)
-    //      - alertsFired: map (required, only keys ['min30', 'min15', 'limit430', 'breakDone'], bool values)
-    //      - lastNotice: string (required, 0..500 chars)
-    //      - history: list (required, <= 20 event maps { id, type, label, timestamp })
-    //
-    // 4. Collection: /users/{userId}/trailers/{trailerId}
+    // 3. Collection: /users/{userId}/trailers/{trailerId}
     //    Document ID: {trailerId} (UUID or trl_<timestamp>_<rand>)
     //    Fields:
     //      - id: string (required, immutable, == trailerId, 1..128 chars)
@@ -75,10 +60,13 @@ service cloud.firestore {
     //      - dateTime: string (required, YYYY-MM-DDTHH:MM..., 16..40 chars)
     //      - sealNumber: string (required, 0..64 chars)
     //      - sealPhotoDataUrl: string (required, '' or data:image/(jpeg|jpg|png|webp);base64,..., <= 600000 chars)
-    //      - checks: map (required, exact keys ['fifthWheelLocked', 'airAndAbsConnected', 'tirCableIntact', 'sealVerified'], bool values)
+    //      - sealPhotoMediaKey: string (optional, 0..200 chars)
+    //      - sealPhotoUrl: string (optional, '' or https://..., <= 1000 chars)
+    //      - extraPhotos: list (optional, <= 4 items; each map has exact keys ['id', 'thumbDataUrl', 'mediaKey', 'url'])
+    //      - checks: map (required, bool values; exact couple keys ['fifthWheelLocked', 'airAndAbsConnected', 'tirCableIntact', 'sealVerified'] for 'couple', or exact uncouple keys ['landingGearDown', 'parkingBrakeEngaged', 'linesDisconnected', 'chocksAndDocsChecked'] / legacy couple keys for 'uncouple')
     //      - createdAt: string (required, immutable, ISO 8601 timestamp, 19..40 chars)
     //
-    // 5. Collection: /users/{userId}/cmrs/{cmrId}
+    // 4. Collection: /users/{userId}/cmrs/{cmrId}
     //    Document ID: {cmrId} (UUID or cmr_<timestamp>_<rand>)
     //    Fields:
     //      - id: string (required, immutable, == cmrId, 1..128 chars)
@@ -89,6 +77,35 @@ service cloud.firestore {
     //      - sizeKb: number (required, >= 0, <= 50000)
     //      - thumbDataUrl: string (required, '' or data:image/(jpeg|jpg|png|webp);base64,..., <= 150000 chars)
     //      - scanDataUrl: string (required, '' or data:image/(jpeg|jpg|png|webp);base64,..., <= 450000 chars)
+    //      - pageCount: number (optional, >= 1, <= 10)
+    //      - scanMediaKey: string (optional, 0..200 chars)
+    //      - scanUrl: string (optional, '' or https://..., <= 1000 chars)
+    //      - pages: list (optional, <= 10 items; each map has exact keys ['id', 'thumbDataUrl', 'mediaKey', 'url'])
+    //      - createdAt: string (required, immutable, ISO 8601 timestamp, 19..40 chars)
+    //
+    // 5. Collection: /users/{userId}/salaryExtras/{extraId}
+    //    Document ID: {extraId} (UUID or extra_<timestamp>_<rand>)
+    //    Fields:
+    //      - id: string (required, immutable, == extraId, 1..128 chars)
+    //      - monthKey: string (required, YYYY-MM, 7 chars)
+    //      - category: string (required, 'holiday' | 'overnight' | 'waiting' | 'other')
+    //      - label: string (required, 1..120 chars)
+    //      - amount: number (required, > 0, <= 100000)
+    //      - createdAt: string (required, immutable, ISO 8601 timestamp, 19..40 chars)
+    //
+    // 6. Collection: /users/{userId}/expenses/{expenseId}
+    //    Document ID: {expenseId} (UUID or exp_<timestamp>_<rand>)
+    //    Fields:
+    //      - id: string (required, immutable, == expenseId, 1..128 chars)
+    //      - date: string (required, YYYY-MM-DD, 10 chars)
+    //      - monthKey: string (required, YYYY-MM, 7 chars)
+    //      - category: string (required, 'parking' | 'toll' | 'wash' | 'food' | 'fuel' | 'other')
+    //      - description: string (required, 0..200 chars)
+    //      - amount: number (required, > 0, <= 100000)
+    //      - reimbursable: bool (required)
+    //      - receiptThumbDataUrl: string (required, '' or data:image/(jpeg|jpg|png|webp);base64,..., <= 150000 chars)
+    //      - receiptMediaKey: string (optional, 0..200 chars)
+    //      - receiptUrl: string (optional, '' or https://..., <= 1000 chars)
     //      - createdAt: string (required, immutable, ISO 8601 timestamp, 19..40 chars)
     //
     // ===============================================================
@@ -141,6 +158,19 @@ service cloud.firestore {
         request.resource.data[field].size() <= maxLen;
     }
 
+    // Validate string value length within inclusive bounds
+    function isStringInRange(val, minLen, maxLen) {
+      return val is string &&
+        val.size() >= minLen &&
+        val.size() <= maxLen;
+    }
+
+    // Validate document id field matches path wildcard and bounded length
+    function isValidDocId(idVal, docId) {
+      return isStringInRange(idVal, 1, 128) &&
+        idVal == docId;
+    }
+
     // Validate YYYY-MM-DD date string format
     function isValidDateOnly(dateStr) {
       return dateStr is string &&
@@ -154,6 +184,13 @@ service cloud.firestore {
         dateStr.size() >= 0 &&
         dateStr.size() <= 10 &&
         (dateStr == '' || isValidDateOnly(dateStr));
+    }
+
+    // Validate YYYY-MM month key format
+    function isValidMonthKey(monthKey) {
+      return monthKey is string &&
+        monthKey.size() == 7 &&
+        monthKey.matches("^\\d{4}-\\d{2}$");
     }
 
     // Validate YYYY-MM-DDTHH:MM (datetime-local) or full ISO 8601 string
@@ -181,14 +218,61 @@ service cloud.firestore {
       );
     }
 
+    // Validate empty string or bounded HTTPS URL (blocks javascript:/http:/data: schemes)
+    function isValidOptionalHttpsUrl(val, maxLen) {
+      return val is string && (
+        val == '' ||
+        (val.size() <= maxLen &&
+         val.matches("^https://.*"))
+      );
+    }
+
     // Validate finite non-negative number within inclusive upper bound
     function isNumberInRange(val, minVal, maxVal) {
       return val is number && val >= minVal && val <= maxVal;
     }
 
-    // Validate that a list enforces size limits
-    function isValidList(listVal, maxSize) {
-      return listVal is list && listVal.size() <= maxSize;
+    // Validate media attachment item used in trailer extraPhotos and CMR pages
+    function isValidMediaItem(item) {
+      let keys = ['id', 'thumbDataUrl', 'mediaKey', 'url'];
+      return item is map &&
+        item.keys().hasAll(keys) &&
+        item.keys().hasOnly(keys) &&
+        isStringInRange(item.id, 1, 64) &&
+        isValidOptionalDataImageUrl(item.thumbDataUrl, 80000) &&
+        isStringInRange(item.mediaKey, 0, 200) &&
+        isValidOptionalHttpsUrl(item.url, 1000);
+    }
+
+    // Validate list element at a fixed index when present
+    function isValidMediaItemAt(items, idx) {
+      return items.size() <= idx || isValidMediaItem(items[idx]);
+    }
+
+    // Validate optional extraPhotos list (max 4 items) on trailer records
+    function isValidExtraPhotos(photos) {
+      return photos is list &&
+        photos.size() <= 4 &&
+        isValidMediaItemAt(photos, 0) &&
+        isValidMediaItemAt(photos, 1) &&
+        isValidMediaItemAt(photos, 2) &&
+        isValidMediaItemAt(photos, 3);
+    }
+
+    // Validate optional pages list (max 10 items) on CMR records
+    function isValidCmrPages(pages) {
+      return pages is list &&
+        pages.size() <= 10 &&
+        isValidMediaItemAt(pages, 0) &&
+        isValidMediaItemAt(pages, 1) &&
+        isValidMediaItemAt(pages, 2) &&
+        isValidMediaItemAt(pages, 3) &&
+        isValidMediaItemAt(pages, 4) &&
+        isValidMediaItemAt(pages, 5) &&
+        isValidMediaItemAt(pages, 6) &&
+        isValidMediaItemAt(pages, 7) &&
+        isValidMediaItemAt(pages, 8) &&
+        isValidMediaItemAt(pages, 9);
     }
 
     // ===============================================================
@@ -208,10 +292,7 @@ service cloud.firestore {
       ];
       return hasRequiredFields(required) &&
         hasOnlyAllowedFields(allowed) &&
-        data.id is string &&
-        data.id == shiftId &&
-        data.id.size() >= 1 &&
-        data.id.size() <= 128 &&
+        isValidDocId(data.id, shiftId) &&
         isValidDateOnly(data.date) &&
         isNumberInRange(data.kmInicial, 0, 100000000) &&
         isNumberInRange(data.kmFinal, data.kmInicial, 100000000) &&
@@ -233,7 +314,8 @@ service cloud.firestore {
       let required = ['retroactiveBonus', 'extraWeekendsByMonth', 'updatedAt'];
       let allowed = [
         'retroactiveBonus', 'extraWeekendsByMonth', 'updatedAt',
-        'initialOdometer', 'theme'
+        'initialOdometer', 'theme',
+        'baseSalary', 'kmThreshold', 'rateStandard', 'rateBonus', 'weekendBonusValue'
       ];
       return hasRequiredFields(required) &&
         hasOnlyAllowedFields(allowed) &&
@@ -242,81 +324,15 @@ service cloud.firestore {
         data.extraWeekendsByMonth.size() <= 120 &&
         isValidIsoTimestamp(data.updatedAt) &&
         (!('initialOdometer' in data) || isNumberInRange(data.initialOdometer, 0, 100000000)) &&
-        (!('theme' in data) || (data.theme is string && data.theme in ['dark', 'light']));
+        (!('theme' in data) || (data.theme is string && data.theme in ['dark', 'light'])) &&
+        (!('baseSalary' in data) || isNumberInRange(data.baseSalary, 0, 100000)) &&
+        (!('kmThreshold' in data) || isNumberInRange(data.kmThreshold, 0, 1000000)) &&
+        (!('rateStandard' in data) || isNumberInRange(data.rateStandard, 0, 100)) &&
+        (!('rateBonus' in data) || isNumberInRange(data.rateBonus, 0, 100)) &&
+        (!('weekendBonusValue' in data) || isNumberInRange(data.weekendBonusValue, 0, 10000));
     }
 
-    function isValidTachoAlertsMap(alerts) {
-      return alerts is map &&
-        alerts.keys().hasOnly(['min30', 'min15', 'limit430', 'breakDone']) &&
-        (!('min30' in alerts) || alerts.min30 is bool) &&
-        (!('min15' in alerts) || alerts.min15 is bool) &&
-        (!('limit430' in alerts) || alerts.limit430 is bool) &&
-        (!('breakDone' in alerts) || alerts.breakDone is bool);
-    }
-
-    function isValidTachoHistoryItem(item) {
-      return item is map &&
-        item.keys().hasOnly(['id', 'type', 'label', 'timestamp']) &&
-        item.keys().hasAll(['id', 'type', 'label', 'timestamp']) &&
-        item.id is string && item.id.size() >= 1 && item.id.size() <= 64 &&
-        item.type is string && item.type.size() >= 1 && item.type.size() <= 32 &&
-        item.label is string && item.label.size() >= 1 && item.label.size() <= 200 &&
-        item.timestamp is string && item.timestamp.size() >= 1 && item.timestamp.size() <= 32;
-    }
-
-    function isValidTachoHistory(h) {
-      return isValidList(h, 20) &&
-        (h.size() < 1 || isValidTachoHistoryItem(h[0])) &&
-        (h.size() < 2 || isValidTachoHistoryItem(h[1])) &&
-        (h.size() < 3 || isValidTachoHistoryItem(h[2])) &&
-        (h.size() < 4 || isValidTachoHistoryItem(h[3])) &&
-        (h.size() < 5 || isValidTachoHistoryItem(h[4])) &&
-        (h.size() < 6 || isValidTachoHistoryItem(h[5])) &&
-        (h.size() < 7 || isValidTachoHistoryItem(h[6])) &&
-        (h.size() < 8 || isValidTachoHistoryItem(h[7])) &&
-        (h.size() < 9 || isValidTachoHistoryItem(h[8])) &&
-        (h.size() < 10 || isValidTachoHistoryItem(h[9])) &&
-        (h.size() < 11 || isValidTachoHistoryItem(h[10])) &&
-        (h.size() < 12 || isValidTachoHistoryItem(h[11])) &&
-        (h.size() < 13 || isValidTachoHistoryItem(h[12])) &&
-        (h.size() < 14 || isValidTachoHistoryItem(h[13])) &&
-        (h.size() < 15 || isValidTachoHistoryItem(h[14])) &&
-        (h.size() < 16 || isValidTachoHistoryItem(h[15])) &&
-        (h.size() < 17 || isValidTachoHistoryItem(h[16])) &&
-        (h.size() < 18 || isValidTachoHistoryItem(h[17])) &&
-        (h.size() < 19 || isValidTachoHistoryItem(h[18])) &&
-        (h.size() < 20 || isValidTachoHistoryItem(h[19]));
-    }
-
-    function isValidTachograph(data) {
-      let allowed = [
-        'status', 'lastUpdatedAt', 'continuousDriveSeconds', 'dailyDriveSeconds',
-        'dailyExtendedTo10h', 'currentBreakSeconds', 'firstSplitBreakDone',
-        'dailyRestSeconds', 'dailyRestTargetHours', 'weekMondayISO',
-        'weekly10hExtensionsUsed', 'weeklyReducedRestsUsed', 'soundEnabled',
-        'alertsFired', 'lastNotice', 'history'
-      ];
-      return hasRequiredFields(allowed) &&
-        hasOnlyAllowedFields(allowed) &&
-        data.status in ['idle', 'driving', 'break', 'resting'] &&
-        isNumberInRange(data.lastUpdatedAt, 0, 9999999999999) &&
-        isNumberInRange(data.continuousDriveSeconds, 0, 10000000) &&
-        isNumberInRange(data.dailyDriveSeconds, 0, 10000000) &&
-        data.dailyExtendedTo10h is bool &&
-        isNumberInRange(data.currentBreakSeconds, 0, 10000000) &&
-        data.firstSplitBreakDone is bool &&
-        isNumberInRange(data.dailyRestSeconds, 0, 10000000) &&
-        isNumberInRange(data.dailyRestTargetHours, 0, 168) &&
-        isValidDateOnly(data.weekMondayISO) &&
-        isNumberInRange(data.weekly10hExtensionsUsed, 0, 10) &&
-        isNumberInRange(data.weeklyReducedRestsUsed, 0, 10) &&
-        data.soundEnabled is bool &&
-        isValidTachoAlertsMap(data.alertsFired) &&
-        validStringLength('lastNotice', 0, 500) &&
-        isValidTachoHistory(data.history);
-    }
-
-    function isValidTrailerChecks(checks) {
+    function isValidCoupleTrailerChecks(checks) {
       let keys = [
         'fifthWheelLocked', 'airAndAbsConnected',
         'tirCableIntact', 'sealVerified'
@@ -330,17 +346,42 @@ service cloud.firestore {
         checks.sealVerified is bool;
     }
 
+    function isValidUncoupleTrailerChecks(checks) {
+      let keys = [
+        'landingGearDown', 'parkingBrakeEngaged',
+        'linesDisconnected', 'chocksAndDocsChecked'
+      ];
+      return checks is map &&
+        checks.keys().hasAll(keys) &&
+        checks.keys().hasOnly(keys) &&
+        checks.landingGearDown is bool &&
+        checks.parkingBrakeEngaged is bool &&
+        checks.linesDisconnected is bool &&
+        checks.chocksAndDocsChecked is bool;
+    }
+
+    function isValidTrailerChecks(checks, actionType) {
+      return (actionType == 'couple' && isValidCoupleTrailerChecks(checks)) ||
+        (actionType == 'uncouple' && (
+          isValidUncoupleTrailerChecks(checks) ||
+          isValidCoupleTrailerChecks(checks)
+        ));
+    }
+
     function isValidTrailer(data, trailerId) {
-      let allowed = [
+      let required = [
         'id', 'actionType', 'plate', 'country', 'location',
         'dateTime', 'sealNumber', 'sealPhotoDataUrl', 'checks', 'createdAt'
       ];
-      return hasRequiredFields(allowed) &&
+      let allowed = [
+        'id', 'actionType', 'plate', 'country', 'location',
+        'dateTime', 'sealNumber', 'sealPhotoDataUrl', 'checks', 'createdAt',
+        'sealPhotoMediaKey', 'sealPhotoUrl', 'extraPhotos'
+      ];
+      return hasRequiredFields(required) &&
         hasOnlyAllowedFields(allowed) &&
-        data.id is string &&
-        data.id == trailerId &&
-        data.id.size() >= 1 &&
-        data.id.size() <= 128 &&
+        isValidDocId(data.id, trailerId) &&
+        data.actionType is string &&
         data.actionType in ['couple', 'uncouple'] &&
         validStringLength('plate', 1, 30) &&
         validStringLength('country', 1, 10) &&
@@ -348,21 +389,26 @@ service cloud.firestore {
         isValidDateTime(data.dateTime) &&
         validStringLength('sealNumber', 0, 64) &&
         isValidOptionalDataImageUrl(data.sealPhotoDataUrl, 600000) &&
-        isValidTrailerChecks(data.checks) &&
-        isValidIsoTimestamp(data.createdAt);
+        isValidTrailerChecks(data.checks, data.actionType) &&
+        isValidIsoTimestamp(data.createdAt) &&
+        (!('sealPhotoMediaKey' in data) || validStringLength('sealPhotoMediaKey', 0, 200)) &&
+        (!('sealPhotoUrl' in data) || isValidOptionalHttpsUrl(data.sealPhotoUrl, 1000)) &&
+        (!('extraPhotos' in data) || isValidExtraPhotos(data.extraPhotos));
     }
 
     function isValidCmr(data, cmrId) {
-      let allowed = [
+      let required = [
         'id', 'date', 'loadNumber', 'fileName', 'notes',
         'sizeKb', 'thumbDataUrl', 'scanDataUrl', 'createdAt'
       ];
-      return hasRequiredFields(allowed) &&
+      let allowed = [
+        'id', 'date', 'loadNumber', 'fileName', 'notes',
+        'sizeKb', 'thumbDataUrl', 'scanDataUrl', 'createdAt',
+        'pageCount', 'scanMediaKey', 'scanUrl', 'pages'
+      ];
+      return hasRequiredFields(required) &&
         hasOnlyAllowedFields(allowed) &&
-        data.id is string &&
-        data.id == cmrId &&
-        data.id.size() >= 1 &&
-        data.id.size() <= 128 &&
+        isValidDocId(data.id, cmrId) &&
         isValidDateOnly(data.date) &&
         validStringLength('loadNumber', 1, 100) &&
         validStringLength('fileName', 1, 150) &&
@@ -370,6 +416,53 @@ service cloud.firestore {
         isNumberInRange(data.sizeKb, 0, 50000) &&
         isValidOptionalDataImageUrl(data.thumbDataUrl, 150000) &&
         isValidOptionalDataImageUrl(data.scanDataUrl, 450000) &&
+        isValidIsoTimestamp(data.createdAt) &&
+        (!('pageCount' in data) || isNumberInRange(data.pageCount, 1, 10)) &&
+        (!('scanMediaKey' in data) || validStringLength('scanMediaKey', 0, 200)) &&
+        (!('scanUrl' in data) || isValidOptionalHttpsUrl(data.scanUrl, 1000)) &&
+        (!('pages' in data) || isValidCmrPages(data.pages));
+    }
+
+    function isValidSalaryExtra(data, extraId) {
+      let keys = ['id', 'monthKey', 'category', 'label', 'amount', 'createdAt'];
+      return hasRequiredFields(keys) &&
+        hasOnlyAllowedFields(keys) &&
+        isValidDocId(data.id, extraId) &&
+        isValidMonthKey(data.monthKey) &&
+        data.category is string &&
+        data.category in ['holiday', 'overnight', 'waiting', 'other'] &&
+        validStringLength('label', 1, 120) &&
+        data.amount is number &&
+        data.amount > 0 &&
+        data.amount <= 100000 &&
+        isValidIsoTimestamp(data.createdAt);
+    }
+
+    function isValidExpense(data, expenseId) {
+      let required = [
+        'id', 'date', 'monthKey', 'category', 'description',
+        'amount', 'reimbursable', 'receiptThumbDataUrl', 'createdAt'
+      ];
+      let allowed = [
+        'id', 'date', 'monthKey', 'category', 'description',
+        'amount', 'reimbursable', 'receiptThumbDataUrl', 'createdAt',
+        'receiptMediaKey', 'receiptUrl'
+      ];
+      return hasRequiredFields(required) &&
+        hasOnlyAllowedFields(allowed) &&
+        isValidDocId(data.id, expenseId) &&
+        isValidDateOnly(data.date) &&
+        isValidMonthKey(data.monthKey) &&
+        data.category is string &&
+        data.category in ['parking', 'toll', 'wash', 'food', 'fuel', 'other'] &&
+        validStringLength('description', 0, 200) &&
+        data.amount is number &&
+        data.amount > 0 &&
+        data.amount <= 100000 &&
+        data.reimbursable is bool &&
+        isValidOptionalDataImageUrl(data.receiptThumbDataUrl, 150000) &&
+        (!('receiptMediaKey' in data) || validStringLength('receiptMediaKey', 0, 200)) &&
+        (!('receiptUrl' in data) || isValidOptionalHttpsUrl(data.receiptUrl, 1000)) &&
         isValidIsoTimestamp(data.createdAt);
     }
 
@@ -403,18 +496,6 @@ service cloud.firestore {
         allow delete: if isOwner(userId);
       }
 
-      // Driver digital tachograph state (CE 561/2006)
-      match /tachograph/{docId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId) &&
-          uidUnchanged() &&
-          isValidTachograph(request.resource.data);
-        allow update: if isOwner(userId) &&
-          uidNotModified() &&
-          isValidTachograph(request.resource.data);
-        allow delete: if isOwner(userId);
-      }
-
       // Trailer coupling/uncoupling checklists & seal records
       match /trailers/{trailerId} {
         allow read: if isOwner(userId);
@@ -438,6 +519,32 @@ service cloud.firestore {
           uidNotModified() &&
           areImmutableFieldsUnchanged(['id', 'createdAt']) &&
           isValidCmr(request.resource.data, cmrId);
+        allow delete: if isOwner(userId);
+      }
+
+      // Driver monthly salary extras
+      match /salaryExtras/{extraId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+          uidUnchanged() &&
+          isValidSalaryExtra(request.resource.data, extraId);
+        allow update: if isOwner(userId) &&
+          uidNotModified() &&
+          areImmutableFieldsUnchanged(['id', 'createdAt']) &&
+          isValidSalaryExtra(request.resource.data, extraId);
+        allow delete: if isOwner(userId);
+      }
+
+      // Driver travel expenses & receipt records
+      match /expenses/{expenseId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+          uidUnchanged() &&
+          isValidExpense(request.resource.data, expenseId);
+        allow update: if isOwner(userId) &&
+          uidNotModified() &&
+          areImmutableFieldsUnchanged(['id', 'createdAt']) &&
+          isValidExpense(request.resource.data, expenseId);
         allow delete: if isOwner(userId);
       }
     }

@@ -8,9 +8,15 @@ import {
   Loader2,
 } from 'lucide-react';
 import {
+  BASE_SALARY,
+  KM_THRESHOLD,
+  RATE_BONUS,
+  RATE_STANDARD,
+  WEEKEND_BONUS_VALUE,
   calculateMonthlySalary,
   formatEuro,
   formatKm,
+  formatRate,
   getLocalDateISO,
 } from '../../utils/salaryCalculator';
 import {
@@ -31,8 +37,15 @@ export default function ShiftModal({
   monthShifts,
   retroactiveBonus,
   extraWeekends,
+  extrasTotal = 0,
+  salaryConfig = {},
   defaultDate,
 }) {
+  const baseSalary = salaryConfig.baseSalary ?? BASE_SALARY;
+  const kmThreshold = salaryConfig.kmThreshold ?? KM_THRESHOLD;
+  const rateStandard = salaryConfig.rateStandard ?? RATE_STANDARD;
+  const rateBonus = salaryConfig.rateBonus ?? RATE_BONUS;
+  const weekendBonusValue = salaryConfig.weekendBonusValue ?? WEEKEND_BONUS_VALUE;
   const dialogRef = useRef(null);
 
   const [startDate, setStartDate] = useState(defaultDate || getLocalDateISO());
@@ -136,10 +149,18 @@ export default function ShiftModal({
       ? monthShifts.filter((s) => s.id !== editingShift.id)
       : monthShifts;
 
-    const beforeStats = calculateMonthlySalary(baseShifts, {
+    const salaryOpts = {
+      baseSalary,
+      kmThreshold,
+      rateStandard,
+      rateBonus,
+      weekendBonusValue,
       retroactiveBonus,
       extraWeekends,
-    });
+      extrasTotal,
+    };
+
+    const beforeStats = calculateMonthlySalary(baseShifts, salaryOpts);
 
     if (!hasValidNumbers && !weekendOut) {
       return null;
@@ -154,10 +175,10 @@ export default function ShiftModal({
       weekendOut,
     };
 
-    const afterStats = calculateMonthlySalary([...baseShifts, simulatedShift], {
-      retroactiveBonus,
-      extraWeekends,
-    });
+    const afterStats = calculateMonthlySalary(
+      [...baseShifts, simulatedShift],
+      salaryOpts
+    );
 
     const salaryDelta =
       Math.round((afterStats.estimatedSalary - beforeStats.estimatedSalary) * 100) /
@@ -174,8 +195,14 @@ export default function ShiftModal({
   }, [
     editingShift,
     monthShifts,
+    baseSalary,
+    kmThreshold,
+    rateStandard,
+    rateBonus,
+    weekendBonusValue,
     retroactiveBonus,
     extraWeekends,
+    extrasTotal,
     hasValidNumbers,
     weekendOut,
     startDate,
@@ -319,16 +346,16 @@ export default function ShiftModal({
       <div className="ios-sheet max-h-[92dvh] overflow-y-auto p-5">
         <div className="ios-grabber" />
 
-        {/* Cabeçalho iOS Sheet */}
-        <div className="mb-4 flex items-center justify-between gap-2">
+        {/* Cabeçalho Sheet */}
+        <div className="mb-4 flex items-center justify-between gap-2 border-b ios-sep-border pb-3">
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] text-[16px] font-medium text-[var(--ios-blue)]"
+            className="min-h-[40px] text-[15px] font-medium text-[var(--ios-label-secondary)] hover:text-[var(--ios-label)]"
           >
             Cancelar
           </button>
-          <h2 id="shift-modal-title" className="text-[17px] font-semibold">
+          <h2 id="shift-modal-title" className="text-[17px] font-bold">
             {isFinishingOpenShift
               ? 'Finalizar Turno'
               : editingShift
@@ -339,7 +366,7 @@ export default function ShiftModal({
             type="button"
             disabled={saving}
             onClick={handleCompleteSubmit}
-            className="min-h-[44px] text-[16px] font-bold text-[var(--ios-blue)]"
+            className="min-h-[40px] text-[15px] font-bold text-[var(--ios-blue)]"
           >
             {saving ? '...' : 'Concluir'}
           </button>
@@ -348,8 +375,8 @@ export default function ShiftModal({
         <form onSubmit={handleCompleteSubmit} className="space-y-4">
           {/* SEÇÃO 1: INÍCIO DO TURNO */}
           <div>
-            <div className="mb-1.5 flex items-center justify-between px-2">
-              <span className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-[var(--ios-green)]">
+            <div className="mb-1.5 flex items-center justify-between px-1">
+              <span className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wider text-[var(--ios-green)]">
                 <Play className="h-3 w-3 fill-current" aria-hidden="true" />
                 Início do Turno
               </span>
@@ -359,16 +386,16 @@ export default function ShiftModal({
                   setStartDate(getLocalDateISO());
                   setStartTime(getCurrentTimeHM());
                 }}
-                className="text-[12px] font-semibold text-[var(--ios-blue)]"
+                className="text-[12px] font-semibold text-[var(--ios-blue)] hover:underline"
               >
                 Agora
               </button>
             </div>
 
-            <div className="ios-fill overflow-hidden rounded-[16px]">
+            <div className="cp-inset overflow-hidden">
               <div className="grid grid-cols-2 border-b ios-sep-border">
                 <label className="border-r ios-sep-border px-3.5 py-2.5">
-                  <span className="block text-[11px] font-medium text-[var(--ios-label-secondary)]">
+                  <span className="block text-[11px] font-semibold text-[var(--ios-label-secondary)]">
                     Data Início
                   </span>
                   <input
@@ -381,7 +408,7 @@ export default function ShiftModal({
                 </label>
 
                 <label className="px-3.5 py-2.5">
-                  <span className="block text-[11px] font-medium text-[var(--ios-label-secondary)]">
+                  <span className="block text-[11px] font-semibold text-[var(--ios-label-secondary)]">
                     Hora Início
                   </span>
                   <input
@@ -396,7 +423,7 @@ export default function ShiftModal({
 
               <div className="flex items-center gap-2 border-b ios-sep-border px-3.5 py-2.5">
                 <div className="flex-1">
-                  <span className="block text-[11px] font-medium text-[var(--ios-label-secondary)]">
+                  <span className="block text-[11px] font-semibold text-[var(--ios-label-secondary)]">
                     Localização Inicial Exata
                   </span>
                   <input
@@ -405,14 +432,14 @@ export default function ShiftModal({
                     value={startLocation}
                     onChange={(e) => setStartLocation(e.target.value)}
                     placeholder="Cidade, rodovia ou toque em GPS"
-                    className="mt-0.5 w-full bg-transparent text-[15px] outline-none placeholder:text-[var(--ios-label-tertiary)]"
+                    className="mt-0.5 w-full bg-transparent text-[14px] outline-none placeholder:text-[var(--ios-label-tertiary)]"
                   />
                 </div>
                 <button
                   type="button"
                   disabled={gpsLoadingField !== null}
                   onClick={() => handleCaptureGps('start')}
-                  className="inline-flex min-h-[40px] shrink-0 items-center gap-1 rounded-full bg-[var(--ios-blue)]/15 px-3 text-[12px] font-semibold text-[var(--ios-blue)] active:scale-95 disabled:opacity-50"
+                  className="inline-flex min-h-[38px] shrink-0 items-center gap-1 rounded-xl border border-[var(--ios-blue)]/25 bg-[var(--ios-blue)]/10 px-3 text-[12px] font-bold text-[var(--ios-blue)] active:scale-95 disabled:opacity-50"
                 >
                   {gpsLoadingField === 'start' ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -423,8 +450,8 @@ export default function ShiftModal({
                 </button>
               </div>
 
-              <label className="flex min-h-[54px] items-center justify-between gap-3 px-3.5">
-                <span className="text-[15px] font-medium">KM Inicial</span>
+              <label className="flex min-h-[52px] items-center justify-between gap-3 px-3.5">
+                <span className="text-[14px] font-semibold">KM Inicial</span>
                 <input
                   type="number"
                   inputMode="numeric"
@@ -448,7 +475,7 @@ export default function ShiftModal({
               type="button"
               disabled={saving}
               onClick={handleStartOpenShift}
-              className="flex min-h-[50px] w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--ios-green)]/15 px-4 text-[15px] font-semibold text-[var(--ios-green)] transition active:scale-[0.98] disabled:opacity-50"
+              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-[var(--ios-green)]/30 bg-[var(--ios-green)]/10 px-4 text-[14px] font-bold text-[var(--ios-green)] transition active:scale-[0.99] disabled:opacity-50"
             >
               <Play className="h-4 w-4 fill-current" aria-hidden="true" />
               Iniciar Turno Agora (Finalizar Depois)
@@ -457,8 +484,8 @@ export default function ShiftModal({
 
           {/* SEÇÃO 2: FINAL DO TURNO */}
           <div>
-            <div className="mb-1.5 flex items-center justify-between px-2">
-              <span className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-[var(--ios-orange)]">
+            <div className="mb-1.5 flex items-center justify-between px-1">
+              <span className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wider text-[var(--ios-blue)]">
                 <Flag className="h-3 w-3" aria-hidden="true" />
                 Final do Turno
               </span>
@@ -468,16 +495,16 @@ export default function ShiftModal({
                   setEndDate(getLocalDateISO());
                   setEndTime(getCurrentTimeHM());
                 }}
-                className="text-[12px] font-semibold text-[var(--ios-blue)]"
+                className="text-[12px] font-semibold text-[var(--ios-blue)] hover:underline"
               >
                 Agora
               </button>
             </div>
 
-            <div className="ios-fill overflow-hidden rounded-[16px]">
+            <div className="cp-inset overflow-hidden">
               <div className="grid grid-cols-2 border-b ios-sep-border">
                 <label className="border-r ios-sep-border px-3.5 py-2.5">
-                  <span className="block text-[11px] font-medium text-[var(--ios-label-secondary)]">
+                  <span className="block text-[11px] font-semibold text-[var(--ios-label-secondary)]">
                     Data Fim
                   </span>
                   <input
@@ -489,7 +516,7 @@ export default function ShiftModal({
                 </label>
 
                 <label className="px-3.5 py-2.5">
-                  <span className="block text-[11px] font-medium text-[var(--ios-label-secondary)]">
+                  <span className="block text-[11px] font-semibold text-[var(--ios-label-secondary)]">
                     Hora Fim
                   </span>
                   <input
@@ -502,14 +529,14 @@ export default function ShiftModal({
               </div>
 
               {crossesMidnight && (
-                <div className="border-b ios-sep-border bg-[var(--ios-blue)]/10 px-3.5 py-2 text-[12px] font-medium text-[var(--ios-blue)]">
+                <div className="border-b ios-sep-border bg-[var(--ios-blue)]/10 px-3.5 py-2 text-[12px] font-semibold text-[var(--ios-blue)]">
                   Turno entre datas diferentes: {startDate} → {endDate}
                 </div>
               )}
 
               <div className="flex items-center gap-2 border-b ios-sep-border px-3.5 py-2.5">
                 <div className="flex-1">
-                  <span className="block text-[11px] font-medium text-[var(--ios-label-secondary)]">
+                  <span className="block text-[11px] font-semibold text-[var(--ios-label-secondary)]">
                     Localização Final Exata
                   </span>
                   <input
@@ -518,14 +545,14 @@ export default function ShiftModal({
                     value={endLocation}
                     onChange={(e) => setEndLocation(e.target.value)}
                     placeholder="Cidade, rodovia ou toque em GPS"
-                    className="mt-0.5 w-full bg-transparent text-[15px] outline-none placeholder:text-[var(--ios-label-tertiary)]"
+                    className="mt-0.5 w-full bg-transparent text-[14px] outline-none placeholder:text-[var(--ios-label-tertiary)]"
                   />
                 </div>
                 <button
                   type="button"
                   disabled={gpsLoadingField !== null}
                   onClick={() => handleCaptureGps('end')}
-                  className="inline-flex min-h-[40px] shrink-0 items-center gap-1 rounded-full bg-[var(--ios-blue)]/15 px-3 text-[12px] font-semibold text-[var(--ios-blue)] active:scale-95 disabled:opacity-50"
+                  className="inline-flex min-h-[38px] shrink-0 items-center gap-1 rounded-xl border border-[var(--ios-blue)]/25 bg-[var(--ios-blue)]/10 px-3 text-[12px] font-bold text-[var(--ios-blue)] active:scale-95 disabled:opacity-50"
                 >
                   {gpsLoadingField === 'end' ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -536,8 +563,8 @@ export default function ShiftModal({
                 </button>
               </div>
 
-              <label className="flex min-h-[54px] items-center justify-between gap-3 px-3.5">
-                <span className="text-[15px] font-medium">KM Final</span>
+              <label className="flex min-h-[52px] items-center justify-between gap-3 px-3.5">
+                <span className="text-[14px] font-semibold">KM Final</span>
                 <input
                   type="number"
                   inputMode="numeric"
@@ -561,7 +588,7 @@ export default function ShiftModal({
                     key={delta}
                     type="button"
                     onClick={() => handleQuickAddKm(delta)}
-                    className="ios-fill tabular-nums min-h-[40px] rounded-full text-[13px] font-semibold text-[var(--ios-blue)] transition active:scale-95"
+                    className="tabular-nums min-h-[38px] rounded-xl border ios-sep-border bg-[var(--ios-card)] text-[13px] font-semibold text-[var(--ios-blue)] transition hover:bg-[var(--ios-fill)] active:scale-95"
                   >
                     +{delta} km
                   </button>
@@ -571,9 +598,9 @@ export default function ShiftModal({
           </div>
 
           {/* Observação + Fim de Semana */}
-          <div className="ios-fill overflow-hidden rounded-[16px]">
-            <label className="flex min-h-[50px] items-center gap-3 border-b ios-sep-border px-3.5">
-              <span className="text-[14px] font-medium text-[var(--ios-label-secondary)]">
+          <div className="cp-inset overflow-hidden">
+            <label className="flex min-h-[48px] items-center gap-3 border-b ios-sep-border px-3.5">
+              <span className="text-[13px] font-semibold text-[var(--ios-label-secondary)]">
                 Nota
               </span>
               <input
@@ -582,17 +609,17 @@ export default function ShiftModal({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Ex: ES -> FR -> DE"
-                className="w-full bg-transparent text-[15px] outline-none placeholder:text-[var(--ios-label-tertiary)]"
+                className="w-full bg-transparent text-[14px] outline-none placeholder:text-[var(--ios-label-tertiary)]"
               />
             </label>
 
-            <div className="flex min-h-[58px] items-center justify-between gap-3 px-3.5 py-2">
+            <div className="flex min-h-[56px] items-center justify-between gap-3 px-3.5 py-2">
               <div>
-                <p className="text-[15px] font-medium">
+                <p className="text-[14px] font-semibold">
                   Fim de Semana Passado Fora
                 </p>
                 <p className="text-[12px] text-[var(--ios-label-secondary)]">
-                  Adiciona +100,00 € ao mês
+                  Adiciona +{formatEuro(weekendBonusValue)} ao mês
                 </p>
               </div>
               <button
@@ -610,7 +637,7 @@ export default function ShiftModal({
 
           {/* Preview em tempo real */}
           {(impactPreview || durationLabel) && (
-            <div className="ios-fill space-y-1.5 rounded-[16px] p-3.5 text-[14px]">
+            <div className="cp-inset space-y-1.5 p-3.5 text-[14px]">
               {durationLabel && (
                 <div className="flex justify-between">
                   <span className="text-[var(--ios-label-secondary)]">Duração</span>
@@ -636,13 +663,13 @@ export default function ShiftModal({
                     </span>
                   </div>
                   {impactPreview.crossesThreshold && (
-                    <div className="mt-2 flex items-start gap-2 rounded-[12px] bg-[var(--ios-green)]/15 p-2.5 text-[12px] font-semibold text-[var(--ios-green)]">
+                    <div className="mt-2 flex items-start gap-2 rounded-xl bg-[var(--ios-green)]/12 p-2.5 text-[12px] font-semibold text-[var(--ios-green)]">
                       <Sparkles className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                       <span>
-                        Meta de 16.000 km ultrapassada ({formatKm(impactPreview.afterTotalKm)} km)!
+                        Meta de {formatKm(kmThreshold)} km ultrapassada ({formatKm(impactPreview.afterTotalKm)} km)!
                         {retroactiveBonus
-                          ? ' Tarifa sobe para 0,12 €/km em todo o mês!'
-                          : ' Excedente acima de 16.000 km passa a 0,12 €/km.'}
+                          ? ` Tarifa sobe para ${formatRate(rateBonus)}/km em todo o mês!`
+                          : ` Excedente acima de ${formatKm(kmThreshold)} km passa a ${formatRate(rateBonus)}/km.`}
                       </span>
                     </div>
                   )}
@@ -652,7 +679,7 @@ export default function ShiftModal({
           )}
 
           {error && (
-            <div className="flex items-center gap-2 rounded-[14px] bg-[var(--ios-red)]/15 p-3 text-[13px] font-medium text-[var(--ios-red)]">
+            <div className="flex items-center gap-2 rounded-xl border border-[var(--ios-red)]/25 bg-[var(--ios-red)]/10 p-3 text-[13px] font-medium text-[var(--ios-red)]">
               <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span>{error}</span>
             </div>
@@ -661,10 +688,10 @@ export default function ShiftModal({
           <button
             type="submit"
             disabled={saving}
-            className={`min-h-[54px] w-full rounded-[14px] px-4 text-[16px] font-semibold text-white transition active:scale-[0.98] disabled:opacity-50 ${
+            className={`min-h-[50px] w-full rounded-xl px-4 text-[15px] font-semibold text-white shadow-sm transition active:scale-[0.99] disabled:opacity-50 ${
               isFinishingOpenShift
                 ? 'bg-[var(--ios-green)]'
-                : 'bg-[var(--ios-blue)]'
+                : 'bg-[var(--ios-blue)] hover:bg-[var(--ios-blue-hover)]'
             }`}
           >
             {saving

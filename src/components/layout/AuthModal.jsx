@@ -97,22 +97,22 @@ export default function AuthModal({ isOpen, onClose, user, onAfterLogout }) {
       <div className="ios-sheet max-h-[92dvh] overflow-y-auto p-5">
         <div className="ios-grabber" />
 
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between border-b ios-sep-border pb-3">
           <span className="w-16" />
-          <h2 id="auth-modal-title" className="text-[17px] font-semibold">
+          <h2 id="auth-modal-title" className="text-[17px] font-bold">
             Conta e Nuvem
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] w-16 text-right text-[16px] font-semibold text-[var(--ios-blue)]"
+            className="min-h-[40px] w-16 text-right text-[15px] font-semibold text-[var(--ios-blue)]"
           >
             OK
           </button>
         </div>
 
         {/* Cartão de persistência offline */}
-        <div className="ios-fill mb-4 flex items-start gap-3 rounded-[16px] p-3.5 text-[12px]">
+        <div className="cp-inset mb-4 flex items-start gap-3 p-3.5 text-[12px]">
           <HardDrive
             className="mt-0.5 h-5 w-5 shrink-0 text-[var(--ios-green)]"
             aria-hidden="true"
@@ -129,7 +129,7 @@ export default function AuthModal({ isOpen, onClose, user, onAfterLogout }) {
         </div>
 
         {!isFirebaseConfigured ? (
-          <div className="ios-fill space-y-2 rounded-[16px] p-4 text-sm">
+          <div className="cp-inset space-y-2 p-4 text-sm">
             <div className="flex items-center gap-2 font-semibold text-[var(--ios-orange)]">
               <AlertTriangle className="h-5 w-5 shrink-0" aria-hidden="true" />
               Firebase em modo local
@@ -141,13 +141,13 @@ export default function AuthModal({ isOpen, onClose, user, onAfterLogout }) {
           </div>
         ) : user ? (
           <div className="space-y-4">
-            <div className="ios-fill flex items-center gap-3 rounded-[16px] p-4">
+            <div className="cp-inset flex items-center gap-3 p-4">
               <CheckCircle2
                 className="h-7 w-7 shrink-0 text-[var(--ios-green)]"
                 aria-hidden="true"
               />
               <div className="min-w-0">
-                <p className="truncate text-[16px] font-semibold">
+                <p className="truncate text-[16px] font-bold">
                   {user.displayName || 'Motorista Conectado'}
                 </p>
                 <p className="truncate text-[13px] text-[var(--ios-label-secondary)]">
@@ -160,7 +160,7 @@ export default function AuthModal({ isOpen, onClose, user, onAfterLogout }) {
               type="button"
               disabled={loading}
               onClick={handleLogout}
-              className="ios-fill flex min-h-[52px] w-full items-center justify-center gap-2 rounded-[14px] px-4 text-[16px] font-semibold text-[var(--ios-red)] transition active:scale-[0.98] disabled:opacity-50"
+              className="flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl border border-[var(--ios-red)]/25 bg-[var(--ios-red)]/10 px-4 text-[15px] font-semibold text-[var(--ios-red)] transition active:scale-[0.99] disabled:opacity-50"
             >
               <LogOut className="h-5 w-5" aria-hidden="true" />
               Terminar Sessão
@@ -172,34 +172,32 @@ export default function AuthModal({ isOpen, onClose, user, onAfterLogout }) {
               type="button"
               disabled={loading}
               onClick={handleGoogleLogin}
-              className="ios-fill flex min-h-[50px] w-full items-center justify-center gap-2 rounded-[14px] px-4 text-[15px] font-semibold transition active:scale-[0.98] disabled:opacity-50"
+              className="flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl border ios-sep-border bg-[var(--ios-card)] px-4 text-[15px] font-semibold text-[var(--ios-label)] shadow-sm transition hover:bg-[var(--ios-fill)] active:scale-[0.99] disabled:opacity-50"
             >
               Continuar com Google
             </button>
 
             <form onSubmit={handleEmailSubmit} className="space-y-3">
-              <div className="ios-fill overflow-hidden rounded-[14px]">
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Email"
-                  className="min-h-[48px] w-full border-b ios-sep-border bg-transparent px-4 text-[15px] outline-none"
-                />
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Senha (mín. 6 caracteres)"
-                  className="min-h-[48px] w-full bg-transparent px-4 text-[15px] outline-none"
-                />
-              </div>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email"
+                className="ios-input min-h-[48px] w-full px-3.5 text-[15px]"
+              />
+              <input
+                type="password"
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Senha (mín. 6 caracteres)"
+                className="ios-input min-h-[48px] w-full px-3.5 text-[15px]"
+              />
 
               {error && (
-                <p className="rounded-[12px] bg-[var(--ios-red)]/15 p-3 text-xs font-medium text-[var(--ios-red)]">
+                <p className="rounded-xl border border-[var(--ios-red)]/25 bg-[var(--ios-red)]/10 p-3 text-xs font-medium text-[var(--ios-red)]">
                   {error}
                 </p>
               )}
@@ -207,7 +205,7 @@ export default function AuthModal({ isOpen, onClose, user, onAfterLogout }) {
               <button
                 type="submit"
                 disabled={loading}
-                className="min-h-[50px] w-full rounded-[14px] bg-[var(--ios-blue)] text-[16px] font-semibold text-white transition active:scale-[0.98] disabled:opacity-50"
+                className="min-h-[50px] w-full rounded-xl bg-[var(--ios-blue)] text-[15px] font-semibold text-white shadow-sm transition hover:bg-[var(--ios-blue-hover)] active:scale-[0.99] disabled:opacity-50"
               >
                 {loading
                   ? 'Conectando...'
@@ -222,7 +220,7 @@ export default function AuthModal({ isOpen, onClose, user, onAfterLogout }) {
               onClick={() =>
                 setMode((prev) => (prev === 'login' ? 'register' : 'login'))
               }
-              className="min-h-[44px] w-full text-center text-[14px] font-medium text-[var(--ios-blue)]"
+              className="min-h-[40px] w-full text-center text-[14px] font-semibold text-[var(--ios-blue)]"
             >
               {mode === 'login'
                 ? 'Criar conta gratuita'

@@ -13,9 +13,9 @@ export default defineConfig({
         name: 'TruckFlow EU — Gestão do Motorista Internacional',
         short_name: 'TruckFlow EU',
         description:
-          'Gestão diária na cabine: cálculo salarial por KM, tacógrafo CE 561/2006, engate de reboque e scanner de CMR offline.',
-        theme_color: '#0f172a',
-        background_color: '#020617',
+          'Gestão diária na cabine: cálculo salarial por KM, engate de reboque, scanner de CMR com recorte e despesas.',
+        theme_color: '#F3F5F8',
+        background_color: '#F3F5F8',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
@@ -51,4 +51,25 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/firebase') || id.includes('node_modules/@firebase')) {
+            return 'firebase-vendor';
+          }
+          if (id.includes('node_modules/jspdf')) {
+            return 'pdf-vendor';
+          }
+          if (id.includes('node_modules/lucide-react')) {
+            return 'icons-vendor';
+          }
+          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) {
+            return 'react-vendor';
+          }
+          return undefined;
+        },
+      },
+    },
+  },
 });
