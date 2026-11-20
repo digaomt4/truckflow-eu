@@ -7,20 +7,55 @@ import {
 } from './cmrGeometry';
 
 /**
- * Monta o nome padronizado exigido: CMR_AAAA-MM-DD_[NumeroCarga].pdf
+ * Monta o nome padronizado exigido:
+ * - Apenas Carga: CMR_AAAA-MM-DD_[NumeroCarga].pdf
+ * - Nº CMR + Carga: CMR_AAAA-MM-DD_[NumeroCMR]_[NumeroCarga].pdf
  */
-export function buildCmrFileName(dateStr, loadNumber) {
+export function buildCmrFileName(dateStr, loadNumber, cmrNumber = '') {
   const safeDate = /^\d{4}-\d{2}-\d{2}$/.test(dateStr || '')
     ? dateStr
     : new Date().toISOString().slice(0, 10);
 
-  const cleanedLoad = String(loadNumber || 'SEM_CARGA')
-    .trim()
-    .replace(/[^a-zA-Z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  const sanitizePart = (raw) =>
+    String(raw || '')
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
 
-  const finalLoad = cleanedLoad || 'SEM_CARGA';
-  return `CMR_${safeDate}_${finalLoad}.pdf`;
+  const cleanedCmr = sanitizePart(cmrNumber);
+  const cleanedLoad = sanitizePart(loadNumber);
+
+  let codePart = 'SEM_CARGA';
+  if (cleanedCmr && cleanedLoad && cleanedCmr !== cleanedLoad) {
+    codePart = `${cleanedCmr}_${cleanedLoad}`;
+  } else if (cleanedLoad) {
+    codePart = cleanedLoad;
+  } else if (cleanedCmr) {
+    codePart = cleanedCmr;
+  }
+
+  return `CMR_${safeDate}_${codePart}.pdf`;
+}
+
+/**
+ * Monta texto resumo estruturado para acompanhar o PDF ao enviar no WhatsApp.
+ */
+export function buildCmrShareSummary(metadata = {}) {
+  const parts = [];
+  if (metadata.cmrNumber) parts.push(`CMR Nº ${metadata.cmrNumber}`);
+  if (metadata.loadNumber) parts.push(`Carga ${metadata.loadNumber}`);
+  if (parts.length === 0) parts.push('CMR');
+
+  const details = [];
+  if (metadata.date) details.push(`Data: ${metadata.date}`);
+  if (metadata.sender) details.push(`Remetente: ${metadata.sender}`);
+  if (metadata.recipient) details.push(`Destinatário: ${metadata.recipient}`);
+  if (metadata.trailerPlate) details.push(`Reboque: ${metadata.trailerPlate}`);
+  if (metadata.sealNumber) details.push(`Selo: ${metadata.sealNumber}`);
+
+  return `${parts.join(' · ')}${
+    details.length > 0 ? ` | ${details.join(' · ')}` : ''
+  } — TruckFlow EU`;
 }
 
 function loadImage(src) {
@@ -530,7 +565,11 @@ export async function generateCmrPdf(pagesInput, metadata = {}) {
     import('jspdf'),
     Promise.all(pages.map((src) => loadImage(src))),
   ]);
-  const fileName = buildCmrFileName(metadata.date, metadata.loadNumber);
+  const fileName = buildCmrFileName(
+    metadata.date,
+    metadata.loadNumber,
+    metadata.cmrNumber
+  );
 
   const dimensions = loadedImages.map((img) =>
     computePdfPageSizeMm(img.naturalWidth || img.width, img.naturalHeight || img.height)
@@ -575,34 +614,54 @@ export function triggerPdfDownload(pdfBlob, fileName) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-/**
- * Aciona imediatamente a Web Share API (navigator.share) para enviar o PDF direto no WhatsApp.
- * Em navegadores desktop sem suporte a share de arquivos, baixa o PDF e retorna fallback para WhatsApp Web.
- */
-export async function shareOrDownloadCmrPdf(pdfBlob, fileName, metadata = {}) {
-  const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-  const shareText = `CMR Carga ${metadata.loadNumber || ''} (${metadata.date || ''}) — Enviado via TruckFlow EU`;
+export function createCmrPdfFile(pdfBlob, fileName) {
+  return new File([pdfBlob], fileName, { type: 'application/pdf' });
+}
 
-  if (
+export function canShareCmrPdfFile(file) {
+  return (
+    Boolean(file) &&
     typeof navigator !== 'undefined' &&
     typeof navigator.share === 'function' &&
     typeof navigator.canShare === 'function' &&
     navigator.canShare({ files: [file] })
-  ) {
+  );
+}
+
+/**
+ * Aciona imediatamente a Web Share API (navigator.share) para compartilhar o PDF no dispositivo (fluxo em 2 toques:
+ * 1º toque abre a folha de compartilhamento do celular, 2º toque escolhe o contato no WhatsApp).
+ * Em navegadores sem suporte a share de arquivos, baixa o PDF e retorna o texto para WhatsApp.
+ */
+export async function shareOrDownloadCmrPdf(
+  pdfBlob,
+  fileName,
+  metadata = {},
+  prebuiltFile = null
+) {
+  const file =
+    prebuiltFile instanceof File
+      ? prebuiltFile
+      : createCmrPdfFile(pdfBlob, fileName);
+  const shareText = buildCmrShareSummary(metadata);
+
+  if (canShareCmrPdfFile(file)) {
     try {
       await navigator.share({
         title: fileName,
         text: shareText,
         files: [file],
       });
-      return { method: 'shared', fileName };
+      return { method: 'shared', fileName, shareText };
     } catch (err) {
       if (err?.name === 'AbortError') {
-        return { method: 'cancelled', fileName };
+        return { method: 'cancelled', fileName, shareText };
       }
     }
   }
 
-  triggerPdfDownload(pdfBlob, fileName);
+  if (pdfBlob) {
+    triggerPdfDownload(pdfBlob, fileName);
+  }
   return { method: 'downloaded', fileName, shareText };
 }

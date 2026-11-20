@@ -17,6 +17,24 @@ import {
 
 const CMRS_STORAGE_KEY = 'truckflow_cmrs_v1';
 const MAX_LOCAL_HISTORY = 15;
+export const VALID_CMR_STATUSES = ['received', 'signed', 'scanned', 'sent'];
+
+function normalizeCmrStatus(val, fallback = 'scanned') {
+  return VALID_CMR_STATUSES.includes(val) ? val : fallback;
+}
+
+function sanitizeSendHistory(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((item) => item && typeof item === 'object')
+    .slice(-15)
+    .map((item, idx) => ({
+      id: String(item.id || `evt_${Date.now()}_${idx}`).slice(0, 64),
+      timestamp: String(item.timestamp || new Date().toISOString()).slice(0, 40),
+      action: String(item.action || 'shared').slice(0, 40),
+      note: String(item.note || '').trim().slice(0, 200),
+    }));
+}
 
 function readLocalCmrs() {
   try {
@@ -105,23 +123,47 @@ export function subscribeCmrRecords(userId, callback) {
 
 export async function saveCmrRecord(userId, cmrData) {
   const id = cmrData.id || createCmrId();
-  const fileName = buildCmrFileName(cmrData.date, cmrData.loadNumber);
+  const current = readLocalCmrs();
+  const existing = current.find((item) => item.id === id);
 
-  const rawPages = Array.isArray(cmrData.pages) && cmrData.pages.length > 0
-    ? cmrData.pages.slice(0, 10)
-    : cmrData.scanDataUrl
-    ? [
-        {
-          id: 'p_0',
-          scanDataUrl: cmrData.scanDataUrl,
-          thumbDataUrl: cmrData.thumbDataUrl || '',
-        },
-      ]
-    : [];
+  const cmrNumber = String(cmrData.cmrNumber ?? existing?.cmrNumber ?? '')
+    .trim()
+    .slice(0, 100);
+  const resolvedLoadNumber = String(
+    cmrData.loadNumber || existing?.loadNumber || cmrNumber || 'SEM-CARGA'
+  )
+    .trim()
+    .slice(0, 100);
+
+  const fileName = buildCmrFileName(cmrData.date, resolvedLoadNumber, cmrNumber);
+
+  const rawPages =
+    Array.isArray(cmrData.pages) && cmrData.pages.length > 0
+      ? cmrData.pages.slice(0, 10)
+      : existing && Array.isArray(existing.pages) && existing.pages.length > 0
+      ? existing.pages
+      : cmrData.scanDataUrl
+      ? [
+          {
+            id: 'p_0',
+            scanDataUrl: cmrData.scanDataUrl,
+            thumbDataUrl: cmrData.thumbDataUrl || '',
+          },
+        ]
+      : [];
 
   const savedPages = [];
   for (let i = 0; i < rawPages.length; i += 1) {
     const page = rawPages[i];
+    if (page.mediaKey && !page.scanDataUrl) {
+      savedPages.push({
+        id: String(page.id || `p_${i}`).slice(0, 64),
+        thumbDataUrl: String(page.thumbDataUrl || '').slice(0, 75000),
+        mediaKey: String(page.mediaKey || '').slice(0, 200),
+        url: String(page.url || '').slice(0, 1000),
+      });
+      continue;
+    }
     const pId = String(page.id || `p_${i}`).slice(0, 64);
     const asset = await saveMediaAsset(
       userId,
@@ -140,27 +182,64 @@ export async function saveCmrRecord(userId, cmrData) {
   const firstPage = rawPages[0] || {};
   const firstSaved = savedPages[0] || {};
   const firstThumb = String(
-    cmrData.thumbDataUrl || firstPage.thumbDataUrl || ''
+    cmrData.thumbDataUrl || firstPage.thumbDataUrl || existing?.thumbDataUrl || ''
   );
-  const firstScan = String(cmrData.scanDataUrl || firstPage.scanDataUrl || '');
+  const firstScan = String(
+    cmrData.scanDataUrl || firstPage.scanDataUrl || existing?.scanDataUrl || ''
+  );
+
+  const nowIso = new Date().toISOString();
+  const baseHistory = sanitizeSendHistory(
+    cmrData.sendHistory ?? existing?.sendHistory ?? []
+  );
+  if (cmrData.appendEvent) {
+    baseHistory.push({
+      id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: nowIso,
+      action: String(cmrData.appendEvent.action || 'shared').slice(0, 40),
+      note: String(cmrData.appendEvent.note || '').trim().slice(0, 200),
+    });
+  }
 
   const normalized = {
     id,
-    date: String(cmrData.date || '').slice(0, 10),
-    loadNumber: String(cmrData.loadNumber || '').trim().slice(0, 100),
+    date: String(cmrData.date || existing?.date || '').slice(0, 10),
+    cmrNumber,
+    loadNumber: resolvedLoadNumber,
+    sender: String(cmrData.sender ?? existing?.sender ?? '')
+      .trim()
+      .slice(0, 200),
+    recipient: String(cmrData.recipient ?? existing?.recipient ?? '')
+      .trim()
+      .slice(0, 200),
+    trailerPlate: String(cmrData.trailerPlate ?? existing?.trailerPlate ?? '')
+      .trim()
+      .toUpperCase()
+      .slice(0, 40),
+    sealNumber: String(cmrData.sealNumber ?? existing?.sealNumber ?? '')
+      .trim()
+      .toUpperCase()
+      .slice(0, 64),
+    status: normalizeCmrStatus(
+      cmrData.status ?? existing?.status,
+      'scanned'
+    ),
+    sendHistory: baseHistory.slice(-15),
     fileName: fileName.slice(0, 150),
-    notes: String(cmrData.notes || '').trim().slice(0, 500),
-    sizeKb: Number(cmrData.sizeKb) || 0,
+    notes: String(cmrData.notes ?? existing?.notes ?? '')
+      .trim()
+      .slice(0, 500),
+    sizeKb: Number(cmrData.sizeKb ?? existing?.sizeKb) || 0,
     pageCount: Math.max(1, Math.min(10, savedPages.length || 1)),
     thumbDataUrl: firstThumb.length <= 145000 ? firstThumb : '',
     scanDataUrl: firstScan,
-    scanMediaKey: (firstSaved.mediaKey || '').slice(0, 200),
-    scanUrl: (firstSaved.url || '').slice(0, 1000),
+    scanMediaKey: (firstSaved.mediaKey || existing?.scanMediaKey || '').slice(0, 200),
+    scanUrl: (firstSaved.url || existing?.scanUrl || '').slice(0, 1000),
     pages: savedPages,
-    createdAt: cmrData.createdAt || new Date().toISOString(),
+    createdAt: cmrData.createdAt || existing?.createdAt || nowIso,
+    updatedAt: nowIso,
   };
 
-  const current = readLocalCmrs();
   const updated = sortDescending([
     normalized,
     ...current.filter((item) => item.id !== id),
@@ -180,6 +259,57 @@ export async function saveCmrRecord(userId, cmrData) {
   }
 
   return { record: normalized, records: updated };
+}
+
+/**
+ * Registra evento no histórico de envio/confirmação manual de um CMR existente
+ * e atualiza seu status quando informado.
+ */
+export async function appendCmrSendEvent(
+  userId,
+  recordId,
+  { action = 'shared', note = '', nextStatus = '' } = {}
+) {
+  const current = readLocalCmrs();
+  const target = current.find((item) => item.id === recordId);
+  if (!target) return { record: null, records: current };
+
+  const nowIso = new Date().toISOString();
+  const history = sanitizeSendHistory(target.sendHistory);
+  history.push({
+    id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    timestamp: nowIso,
+    action: String(action || 'shared').slice(0, 40),
+    note: String(note || '').trim().slice(0, 200),
+  });
+
+  const updatedRecord = {
+    ...target,
+    status: nextStatus
+      ? normalizeCmrStatus(nextStatus, target.status || 'scanned')
+      : normalizeCmrStatus(target.status, 'scanned'),
+    sendHistory: history.slice(-15),
+    updatedAt: nowIso,
+  };
+
+  const updatedList = sortDescending(
+    current.map((item) => (item.id === recordId ? updatedRecord : item))
+  );
+  writeLocalCmrs(updatedList);
+
+  if (isFirebaseConfigured && db && userId) {
+    const firestorePayload =
+      updatedRecord.pageCount === 1 &&
+      (updatedRecord.scanDataUrl || '').length < 450000
+        ? updatedRecord
+        : { ...updatedRecord, scanDataUrl: '' };
+
+    await setDoc(doc(db, 'users', userId, 'cmrs', recordId), firestorePayload, {
+      merge: true,
+    });
+  }
+
+  return { record: updatedRecord, records: updatedList };
 }
 
 /**

@@ -61,6 +61,9 @@ export default defineConfig({
           if (id.includes('node_modules/jspdf')) {
             return 'pdf-vendor';
           }
+          if (id.includes('node_modules/tesseract.js')) {
+            return 'ocr-vendor';
+          }
           if (id.includes('node_modules/lucide-react')) {
             return 'icons-vendor';
           }

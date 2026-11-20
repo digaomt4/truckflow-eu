@@ -106,6 +106,24 @@ export function getActiveCoupledTrailerPlate() {
   return latest.country ? `${latest.plate} (${latest.country})` : latest.plate;
 }
 
+/**
+ * Retorna matrícula, país e selo do reboque atualmente engatado (ou null se desengatado).
+ */
+export function getActiveCoupledTrailerInfo() {
+  const latest = sortDescending(readLocalTrailers())[0];
+  if (!latest || latest.actionType !== 'couple' || !latest.plate) {
+    return null;
+  }
+  return {
+    plate: latest.plate,
+    country: latest.country || '',
+    formattedPlate: latest.country
+      ? `${latest.plate} (${latest.country})`
+      : latest.plate,
+    sealNumber: latest.sealNumber || '',
+  };
+}
+
 function createRecordId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
