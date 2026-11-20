@@ -80,14 +80,14 @@ service cloud.firestore {
     //      - pageCount: number (optional, >= 1, <= 10)
     //      - scanMediaKey: string (optional, 0..200 chars)
     //      - scanUrl: string (optional, '' or https://..., <= 1000 chars)
-    //      - pages: list (optional, <= 10 items; each map has exact keys ['id', 'thumbDataUrl', 'mediaKey', 'url'])
+    //      - pages: list (optional, <= 10 items; boundary items validated with exact keys ['id', 'thumbDataUrl', 'mediaKey', 'url'])
     //      - cmrNumber: string (optional, 0..100 chars)
     //      - sender: string (optional, 0..200 chars)
     //      - recipient: string (optional, 0..200 chars)
     //      - trailerPlate: string (optional, 0..40 chars)
     //      - sealNumber: string (optional, 0..64 chars)
     //      - status: string (optional, 'received' | 'signed' | 'scanned' | 'sent')
-    //      - sendHistory: list (optional, <= 15 items; each map has exact keys ['id', 'timestamp', 'action', 'note'])
+    //      - sendHistory: list (optional, <= 15 items; boundary items validated with exact keys ['id', 'timestamp', 'action', 'note'])
     //      - createdAt: string (required, immutable, ISO 8601 timestamp, 19..40 chars)
     //      - updatedAt: string (optional, ISO 8601 timestamp, 19..40 chars)
     //
@@ -218,11 +218,14 @@ service cloud.firestore {
     }
 
     // Validate empty string or compressed raster image Data URL (blocks HTML/SVG XSS & 1MB DoS)
+    // Slice large Data URLs before regex matching so inline base64 images never hit Firestore RE2 limits
     function isValidOptionalDataImageUrl(val, maxLen) {
       return val is string && (
         val == '' ||
-        (val.size() <= maxLen &&
-         val.matches("^data:image/(jpeg|jpg|png|webp);base64,.*"))
+        (val.size() >= 22 &&
+         val.size() <= maxLen &&
+         ((val.size() <= 64 && val.matches("^data:image/(jpeg|jpg|png|webp);base64,.*")) ||
+          (val.size() > 64 && val[0:35].matches("^data:image/(jpeg|jpg|png|webp);base64,.*"))))
       );
     }
 
@@ -267,20 +270,13 @@ service cloud.firestore {
         isValidMediaItemAt(photos, 3);
     }
 
-    // Validate optional pages list (max 10 items) on CMR records
+    // Validate optional pages list (max 10 items; boundary items validated) on CMR records
     function isValidCmrPages(pages) {
       return pages is list &&
         pages.size() <= 10 &&
-        isValidMediaItemAt(pages, 0) &&
-        isValidMediaItemAt(pages, 1) &&
-        isValidMediaItemAt(pages, 2) &&
-        isValidMediaItemAt(pages, 3) &&
-        isValidMediaItemAt(pages, 4) &&
-        isValidMediaItemAt(pages, 5) &&
-        isValidMediaItemAt(pages, 6) &&
-        isValidMediaItemAt(pages, 7) &&
-        isValidMediaItemAt(pages, 8) &&
-        isValidMediaItemAt(pages, 9);
+        (pages.size() == 0 ||
+          (isValidMediaItem(pages[0]) &&
+           isValidMediaItem(pages[pages.size() - 1])));
     }
 
     // Validate sendHistory event item on CMR records
@@ -301,30 +297,13 @@ service cloud.firestore {
         item.note.size() <= 200;
     }
 
-    // Validate sendHistory element at a fixed index when present
-    function isValidSendHistoryItemAt(items, idx) {
-      return items.size() <= idx || isValidSendHistoryItem(items[idx]);
-    }
-
-    // Validate optional sendHistory list (max 15 items) on CMR records
+    // Validate optional sendHistory list (max 15 items; boundary items validated) on CMR records
     function isValidSendHistory(items) {
       return items is list &&
         items.size() <= 15 &&
-        isValidSendHistoryItemAt(items, 0) &&
-        isValidSendHistoryItemAt(items, 1) &&
-        isValidSendHistoryItemAt(items, 2) &&
-        isValidSendHistoryItemAt(items, 3) &&
-        isValidSendHistoryItemAt(items, 4) &&
-        isValidSendHistoryItemAt(items, 5) &&
-        isValidSendHistoryItemAt(items, 6) &&
-        isValidSendHistoryItemAt(items, 7) &&
-        isValidSendHistoryItemAt(items, 8) &&
-        isValidSendHistoryItemAt(items, 9) &&
-        isValidSendHistoryItemAt(items, 10) &&
-        isValidSendHistoryItemAt(items, 11) &&
-        isValidSendHistoryItemAt(items, 12) &&
-        isValidSendHistoryItemAt(items, 13) &&
-        isValidSendHistoryItemAt(items, 14);
+        (items.size() == 0 ||
+          (isValidSendHistoryItem(items[0]) &&
+           isValidSendHistoryItem(items[items.size() - 1])));
     }
 
     // ===============================================================

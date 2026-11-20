@@ -47,7 +47,10 @@ if (isFirebaseConfigured) {
   googleProvider.setCustomParameters({ prompt: 'select_account' });
 
   db = getFirestore(app);
-  if (firebaseConfig.storageBucket) {
+  if (
+    firebaseConfig.storageBucket &&
+    import.meta.env.VITE_FIREBASE_ENABLE_STORAGE === 'true'
+  ) {
     try {
       storage = getStorage(app);
     } catch {

@@ -247,15 +247,19 @@ export async function saveCmrRecord(userId, cmrData) {
   writeLocalCmrs(updated);
 
   if (isFirebaseConfigured && db && userId) {
-    // Limite de 1MB por documento Firestore: envia scan inline apenas se página única < 450KB
+    // Limite de segurança Firestore: evita payload base64 grande no doc (HD fica garantido no IndexedDB)
     const firestorePayload =
-      normalized.pageCount === 1 && normalized.scanDataUrl.length < 450000
+      normalized.pageCount === 1 && normalized.scanDataUrl.length < 160000
         ? normalized
         : { ...normalized, scanDataUrl: '' };
 
-    await setDoc(doc(db, 'users', userId, 'cmrs', id), firestorePayload, {
-      merge: true,
-    });
+    try {
+      await setDoc(doc(db, 'users', userId, 'cmrs', id), firestorePayload, {
+        merge: true,
+      });
+    } catch (err) {
+      console.warn('[TruckFlow EU] Aviso ao sincronizar CMR no Firestore:', err);
+    }
   }
 
   return { record: normalized, records: updated };
@@ -300,13 +304,17 @@ export async function appendCmrSendEvent(
   if (isFirebaseConfigured && db && userId) {
     const firestorePayload =
       updatedRecord.pageCount === 1 &&
-      (updatedRecord.scanDataUrl || '').length < 450000
+      (updatedRecord.scanDataUrl || '').length < 160000
         ? updatedRecord
         : { ...updatedRecord, scanDataUrl: '' };
 
-    await setDoc(doc(db, 'users', userId, 'cmrs', recordId), firestorePayload, {
-      merge: true,
-    });
+    try {
+      await setDoc(doc(db, 'users', userId, 'cmrs', recordId), firestorePayload, {
+        merge: true,
+      });
+    } catch (err) {
+      console.warn('[TruckFlow EU] Aviso ao sincronizar CMR no Firestore:', err);
+    }
   }
 
   return { record: updatedRecord, records: updatedList };

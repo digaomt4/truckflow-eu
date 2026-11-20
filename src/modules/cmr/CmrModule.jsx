@@ -604,7 +604,10 @@ export default function CmrModule({ user }) {
     }
   };
 
-  const handleConfirmManualSent = async (recordId) => {
+  const handleConfirmManualSent = async (
+    recordId,
+    { finalizeDraft = false } = {}
+  ) => {
     if (!recordId) return;
     setError('');
     const { record: updatedRec, records: updatedList } =
@@ -614,9 +617,17 @@ export default function CmrModule({ user }) {
         nextStatus: 'sent',
       });
     setRecords(updatedList);
-    if (activeDraftRecordId === recordId) {
-      setStatus('sent');
+
+    if (finalizeDraft || activeDraftRecordId === recordId) {
+      handleResetDraft();
+      setStatusMessage(
+        updatedRec
+          ? `CMR ${updatedRec.fileName} confirmado como Enviado e salvo no histórico abaixo!`
+          : 'CMR confirmado como Enviado e salvo no histórico abaixo!'
+      );
+      return;
     }
+
     if (pendingConfirmRecordId === recordId) {
       setPendingConfirmRecordId(null);
     }
@@ -1223,11 +1234,33 @@ export default function CmrModule({ user }) {
               {pendingConfirmRecordId && (
                 <button
                   type="button"
-                  onClick={() => handleConfirmManualSent(pendingConfirmRecordId)}
+                  onClick={() =>
+                    handleConfirmManualSent(pendingConfirmRecordId, {
+                      finalizeDraft: true,
+                    })
+                  }
                   className="inline-flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[var(--ios-green)] px-3 text-[13px] font-bold text-white shadow-sm"
                 >
                   <Check className="h-4 w-4" aria-hidden="true" />
-                  Confirmar Envio Realizado
+                  Confirmar Envio e Finalizar
+                </button>
+              )}
+
+              {(pendingConfirmRecordId || (lastSharePayload && activeDraftRecordId)) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const savedName = lastSharePayload?.fileName;
+                    handleResetDraft();
+                    setStatusMessage(
+                      savedName
+                        ? `${savedName} salvo no histórico abaixo!`
+                        : 'CMR salvo no histórico abaixo!'
+                    );
+                  }}
+                  className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl border ios-sep-border bg-[var(--ios-card)] px-3 text-[13px] font-semibold text-[var(--ios-label)]"
+                >
+                  Concluir e Limpar Tela
                 </button>
               )}
 
