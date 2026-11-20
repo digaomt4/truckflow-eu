@@ -23,6 +23,7 @@ import {
   Loader2,
   Truck,
   Clock,
+  Save,
 } from 'lucide-react';
 import {
   buildCmrFileName,
@@ -572,6 +573,8 @@ export default function CmrModule({ user }) {
       );
 
       setRecords(updated);
+      setStatusFilter('all');
+      setMonthFilter('all');
       setActiveDraftRecordId(savedRec.id);
       setPendingConfirmRecordId(savedRec.id);
       setStatus(savedRec.status);
@@ -604,6 +607,77 @@ export default function CmrModule({ user }) {
     }
   };
 
+  const handleSaveOnly = async () => {
+    setError('');
+    setStatusMessage('');
+
+    if (pages.length === 0) {
+      setError('Tire uma foto do CMR ou selecione da galeria primeiro.');
+      return;
+    }
+
+    if (!loadNumber.trim() && !cmrNumber.trim()) {
+      setError('Informe o Número do CMR ou da Carga para salvar no histórico.');
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const resolvedLoad = loadNumber || cmrNumber;
+      const isPrebuiltReady =
+        preparedPdf && preparedPdf.key === currentPrepKey;
+      const sizeKb = isPrebuiltReady
+        ? preparedPdf.sizeKb
+        : Math.max(
+            1,
+            Math.round(
+              pages.reduce((sum, p) => sum + (p.processedScan?.approxKb || 0), 0)
+            )
+          );
+
+      const nextSaveStatus = status === 'received' ? 'scanned' : status;
+      const { record: savedRec, records: updated } = await saveCmrRecord(
+        user?.uid || null,
+        {
+          id: activeDraftRecordId || undefined,
+          date,
+          cmrNumber,
+          loadNumber: resolvedLoad,
+          sender,
+          recipient,
+          trailerPlate,
+          sealNumber,
+          status: nextSaveStatus,
+          notes,
+          sizeKb,
+          thumbDataUrl: pages[0]?.processedScan?.thumbDataUrl || '',
+          scanDataUrl: pages[0]?.processedScan?.scanDataUrl || '',
+          pages: pages.map((p) => ({
+            id: p.id,
+            scanDataUrl: p.processedScan?.scanDataUrl || '',
+            thumbDataUrl: p.processedScan?.thumbDataUrl || '',
+          })),
+          appendEvent: {
+            action: 'status_change',
+            note: `Salvo no histórico (${getStatusLabel(nextSaveStatus)})`,
+          },
+        }
+      );
+
+      setRecords(updated);
+      setStatusFilter('all');
+      setMonthFilter('all');
+      handleResetDraft();
+      setStatusMessage(
+        `CMR ${savedRec.fileName} salvo no histórico abaixo (${savedRec.pageCount || pages.length} pág.)!`
+      );
+    } catch (err) {
+      setError(err.message || 'Falha ao salvar CMR no histórico.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const handleConfirmManualSent = async (
     recordId,
     { finalizeDraft = false } = {}
@@ -617,6 +691,8 @@ export default function CmrModule({ user }) {
         nextStatus: 'sent',
       });
     setRecords(updatedList);
+    setStatusFilter('all');
+    setMonthFilter('all');
 
     if (finalizeDraft || activeDraftRecordId === recordId) {
       handleResetDraft();
@@ -1317,23 +1393,39 @@ export default function CmrModule({ user }) {
           </div>
         )}
 
-        <button
-          type="button"
-          disabled={generating || processing || pages.length === 0}
-          onClick={handleGenerateAndShare}
-          className={`flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl px-4 text-[15px] font-semibold transition active:scale-[0.99] ${
-            pages.length > 0
-              ? 'bg-[var(--ios-green)] text-white shadow-sm'
-              : 'border ios-sep-border bg-[var(--ios-fill)] cursor-not-allowed text-[var(--ios-label-tertiary)]'
-          }`}
-        >
-          <Share2 className="h-5 w-5" aria-hidden="true" />
-          {generating
-            ? 'Gerando e Abrindo...'
-            : shareButtonReady
-            ? `1º Toque: Compartilhar PDF${pages.length > 1 ? ` (${pages.length} págs)` : ''}`
-            : `Gerar PDF${pages.length > 1 ? ` (${pages.length} págs)` : ''} e Compartilhar`}
-        </button>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <button
+            type="button"
+            disabled={generating || processing || pages.length === 0}
+            onClick={handleGenerateAndShare}
+            className={`sm:col-span-2 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl px-4 text-[15px] font-semibold transition active:scale-[0.99] ${
+              pages.length > 0
+                ? 'bg-[var(--ios-green)] text-white shadow-sm'
+                : 'border ios-sep-border bg-[var(--ios-fill)] cursor-not-allowed text-[var(--ios-label-tertiary)]'
+            }`}
+          >
+            <Share2 className="h-5 w-5" aria-hidden="true" />
+            {generating
+              ? 'Gerando e Abrindo...'
+              : shareButtonReady
+              ? `1º Toque: Compartilhar PDF${pages.length > 1 ? ` (${pages.length} págs)` : ''}`
+              : `Gerar PDF${pages.length > 1 ? ` (${pages.length} págs)` : ''} e Compartilhar`}
+          </button>
+
+          <button
+            type="button"
+            disabled={generating || processing || pages.length === 0}
+            onClick={handleSaveOnly}
+            className={`flex min-h-[52px] w-full items-center justify-center gap-1.5 rounded-xl border px-3 text-[13px] font-bold transition active:scale-[0.99] ${
+              pages.length > 0
+                ? 'border-[var(--ios-blue)]/30 bg-[var(--ios-blue)]/10 text-[var(--ios-blue)]'
+                : 'ios-sep-border bg-[var(--ios-fill)] cursor-not-allowed text-[var(--ios-label-tertiary)]'
+            }`}
+          >
+            <Save className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Salvar no Histórico
+          </button>
+        </div>
 
         <p className="text-center text-[11px] text-[var(--ios-label-secondary)]">
           Usa o compartilhamento do dispositivo (1º toque abre o menu, 2º toque escolhe o WhatsApp). Depois confirme o envio manualmente.

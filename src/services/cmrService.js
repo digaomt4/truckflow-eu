@@ -18,6 +18,7 @@ import {
 const CMRS_STORAGE_KEY = 'truckflow_cmrs_v1';
 const MAX_LOCAL_HISTORY = 15;
 export const VALID_CMR_STATUSES = ['received', 'signed', 'scanned', 'sent'];
+const deletedIds = new Set();
 
 function normalizeCmrStatus(val, fallback = 'scanned') {
   return VALID_CMR_STATUSES.includes(val) ? val : fallback;
@@ -81,6 +82,33 @@ function createCmrId() {
   return `cmr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function mergeRemoteAndLocalCmrs(remoteList, localList) {
+  const byId = new Map();
+
+  for (const remoteRec of remoteList) {
+    if (remoteRec?.id && !deletedIds.has(remoteRec.id)) {
+      byId.set(remoteRec.id, remoteRec);
+    }
+  }
+
+  for (const localRec of localList) {
+    if (!localRec?.id || deletedIds.has(localRec.id)) continue;
+    const remoteRec = byId.get(localRec.id);
+    if (!remoteRec) {
+      byId.set(localRec.id, localRec);
+      continue;
+    }
+
+    const localTs = String(localRec.updatedAt || localRec.createdAt || '');
+    const remoteTs = String(remoteRec.updatedAt || remoteRec.createdAt || '');
+    if (localTs > remoteTs) {
+      byId.set(localRec.id, localRec);
+    }
+  }
+
+  return sortDescending(Array.from(byId.values()));
+}
+
 export function subscribeCmrRecords(userId, callback) {
   const local = sortDescending(readLocalCmrs());
   callback(local);
@@ -91,31 +119,34 @@ export function subscribeCmrRecords(userId, callback) {
 
   const colRef = collection(db, 'users', userId, 'cmrs');
   const q = query(colRef, orderBy('createdAt', 'desc'));
-  let migrationChecked = false;
+  const attemptedSyncIds = new Set();
 
   return onSnapshot(
     q,
     (snapshot) => {
       const remote = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-      if (!migrationChecked) {
-        migrationChecked = true;
-        const currentLocal = readLocalCmrs();
-        if (remote.length === 0 && currentLocal.length > 0) {
-          currentLocal.forEach((rec) => {
-            const payload =
-              (rec.scanDataUrl || '').length < 450000
-                ? rec
-                : { ...rec, scanDataUrl: '' };
-            setDoc(doc(db, 'users', userId, 'cmrs', rec.id), payload, {
-              merge: true,
-            }).catch(() => {});
-          });
-          return;
+      const remoteIds = new Set(remote.map((r) => r.id));
+      const currentLocal = readLocalCmrs();
+
+      // Sincroniza em segundo plano registros locais ainda ausentes no Firestore
+      currentLocal.forEach((rec) => {
+        if (
+          rec?.id &&
+          !deletedIds.has(rec.id) &&
+          !remoteIds.has(rec.id) &&
+          !attemptedSyncIds.has(rec.id)
+        ) {
+          attemptedSyncIds.add(rec.id);
+          const payload = { ...rec, scanDataUrl: '' };
+          setDoc(doc(db, 'users', userId, 'cmrs', rec.id), payload, {
+            merge: true,
+          }).catch(() => {});
         }
-      }
-      const sorted = sortDescending(remote);
-      writeLocalCmrs(sorted);
-      callback(sorted);
+      });
+
+      const merged = mergeRemoteAndLocalCmrs(remote, currentLocal);
+      writeLocalCmrs(merged);
+      callback(merged);
     },
     () => {}
   );
@@ -247,11 +278,8 @@ export async function saveCmrRecord(userId, cmrData) {
   writeLocalCmrs(updated);
 
   if (isFirebaseConfigured && db && userId) {
-    // Limite de segurança Firestore: evita payload base64 grande no doc (HD fica garantido no IndexedDB)
-    const firestorePayload =
-      normalized.pageCount === 1 && normalized.scanDataUrl.length < 160000
-        ? normalized
-        : { ...normalized, scanDataUrl: '' };
+    // Envia sempre scanDataUrl vazio ao Firestore (~10 KB por doc); o scan HD completo fica no IndexedDB
+    const firestorePayload = { ...normalized, scanDataUrl: '' };
 
     try {
       await setDoc(doc(db, 'users', userId, 'cmrs', id), firestorePayload, {
@@ -302,11 +330,7 @@ export async function appendCmrSendEvent(
   writeLocalCmrs(updatedList);
 
   if (isFirebaseConfigured && db && userId) {
-    const firestorePayload =
-      updatedRecord.pageCount === 1 &&
-      (updatedRecord.scanDataUrl || '').length < 160000
-        ? updatedRecord
-        : { ...updatedRecord, scanDataUrl: '' };
+    const firestorePayload = { ...updatedRecord, scanDataUrl: '' };
 
     try {
       await setDoc(doc(db, 'users', userId, 'cmrs', recordId), firestorePayload, {
@@ -350,6 +374,7 @@ export async function resolveCmrPages(record) {
 }
 
 export async function deleteCmrRecord(userId, recordId) {
+  if (recordId) deletedIds.add(recordId);
   const current = readLocalCmrs();
   const target = current.find((item) => item.id === recordId);
 

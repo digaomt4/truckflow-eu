@@ -80,14 +80,14 @@ service cloud.firestore {
     //      - pageCount: number (optional, >= 1, <= 10)
     //      - scanMediaKey: string (optional, 0..200 chars)
     //      - scanUrl: string (optional, '' or https://..., <= 1000 chars)
-    //      - pages: list (optional, <= 10 items; boundary items validated with exact keys ['id', 'thumbDataUrl', 'mediaKey', 'url'])
+    //      - pages: list (optional, <= 10 items)
     //      - cmrNumber: string (optional, 0..100 chars)
     //      - sender: string (optional, 0..200 chars)
     //      - recipient: string (optional, 0..200 chars)
     //      - trailerPlate: string (optional, 0..40 chars)
     //      - sealNumber: string (optional, 0..64 chars)
     //      - status: string (optional, 'received' | 'signed' | 'scanned' | 'sent')
-    //      - sendHistory: list (optional, <= 15 items; boundary items validated with exact keys ['id', 'timestamp', 'action', 'note'])
+    //      - sendHistory: list (optional, <= 15 items)
     //      - createdAt: string (required, immutable, ISO 8601 timestamp, 19..40 chars)
     //      - updatedAt: string (optional, ISO 8601 timestamp, 19..40 chars)
     //
@@ -218,14 +218,11 @@ service cloud.firestore {
     }
 
     // Validate empty string or compressed raster image Data URL (blocks HTML/SVG XSS & 1MB DoS)
-    // Slice large Data URLs before regex matching so inline base64 images never hit Firestore RE2 limits
     function isValidOptionalDataImageUrl(val, maxLen) {
       return val is string && (
         val == '' ||
-        (val.size() >= 22 &&
-         val.size() <= maxLen &&
-         ((val.size() <= 64 && val.matches("^data:image/(jpeg|jpg|png|webp);base64,.*")) ||
-          (val.size() > 64 && val[0:35].matches("^data:image/(jpeg|jpg|png|webp);base64,.*"))))
+        (val.size() <= maxLen &&
+         val.matches("^data:image/(jpeg|jpg|png|webp);base64,.*"))
       );
     }
 
@@ -268,42 +265,6 @@ service cloud.firestore {
         isValidMediaItemAt(photos, 1) &&
         isValidMediaItemAt(photos, 2) &&
         isValidMediaItemAt(photos, 3);
-    }
-
-    // Validate optional pages list (max 10 items; boundary items validated) on CMR records
-    function isValidCmrPages(pages) {
-      return pages is list &&
-        pages.size() <= 10 &&
-        (pages.size() == 0 ||
-          (isValidMediaItem(pages[0]) &&
-           isValidMediaItem(pages[pages.size() - 1])));
-    }
-
-    // Validate sendHistory event item on CMR records
-    function isValidSendHistoryItem(item) {
-      return item is map &&
-        item.keys().hasOnly(['id', 'timestamp', 'action', 'note']) &&
-        item.size() == 4 &&
-        item.id is string &&
-        item.id.size() >= 1 &&
-        item.id.size() <= 64 &&
-        isValidIsoTimestamp(item.timestamp) &&
-        item.action is string &&
-        item.action in [
-          'shared', 'downloaded', 'whatsapp_opened',
-          'confirmed_manual', 'status_change'
-        ] &&
-        item.note is string &&
-        item.note.size() <= 200;
-    }
-
-    // Validate optional sendHistory list (max 15 items; boundary items validated) on CMR records
-    function isValidSendHistory(items) {
-      return items is list &&
-        items.size() <= 15 &&
-        (items.size() == 0 ||
-          (isValidSendHistoryItem(items[0]) &&
-           isValidSendHistoryItem(items[items.size() - 1])));
     }
 
     // ===============================================================
@@ -439,28 +400,38 @@ service cloud.firestore {
         'cmrNumber', 'sender', 'recipient', 'trailerPlate',
         'sealNumber', 'status', 'sendHistory', 'updatedAt'
       ];
-      return hasRequiredFields(required) &&
-        hasOnlyAllowedFields(allowed) &&
-        isValidDocId(data.id, cmrId) &&
+      return data.keys().hasAll(required) &&
+        data.keys().hasOnly(allowed) &&
+        data.id is string &&
+        data.id.size() >= 1 &&
+        data.id.size() <= 128 &&
+        data.id == cmrId &&
         isValidDateOnly(data.date) &&
-        validStringLength('loadNumber', 1, 100) &&
-        validStringLength('fileName', 1, 150) &&
-        validStringLength('notes', 0, 500) &&
-        isNumberInRange(data.sizeKb, 0, 50000) &&
+        data.loadNumber is string &&
+        data.loadNumber.size() >= 1 &&
+        data.loadNumber.size() <= 100 &&
+        data.fileName is string &&
+        data.fileName.size() >= 1 &&
+        data.fileName.size() <= 150 &&
+        data.notes is string &&
+        data.notes.size() <= 500 &&
+        data.sizeKb is number &&
+        data.sizeKb >= 0 &&
+        data.sizeKb <= 50000 &&
         isValidOptionalDataImageUrl(data.thumbDataUrl, 150000) &&
         isValidOptionalDataImageUrl(data.scanDataUrl, 450000) &&
         isValidIsoTimestamp(data.createdAt) &&
-        (!('pageCount' in data) || isNumberInRange(data.pageCount, 1, 10)) &&
-        (!('scanMediaKey' in data) || validStringLength('scanMediaKey', 0, 200)) &&
+        (!('pageCount' in data) || (data.pageCount is number && data.pageCount >= 1 && data.pageCount <= 10)) &&
+        (!('scanMediaKey' in data) || (data.scanMediaKey is string && data.scanMediaKey.size() <= 200)) &&
         (!('scanUrl' in data) || isValidOptionalHttpsUrl(data.scanUrl, 1000)) &&
-        (!('pages' in data) || isValidCmrPages(data.pages)) &&
-        (!('cmrNumber' in data) || validStringLength('cmrNumber', 0, 100)) &&
-        (!('sender' in data) || validStringLength('sender', 0, 200)) &&
-        (!('recipient' in data) || validStringLength('recipient', 0, 200)) &&
-        (!('trailerPlate' in data) || validStringLength('trailerPlate', 0, 40)) &&
-        (!('sealNumber' in data) || validStringLength('sealNumber', 0, 64)) &&
+        (!('pages' in data) || (data.pages is list && data.pages.size() <= 10)) &&
+        (!('cmrNumber' in data) || (data.cmrNumber is string && data.cmrNumber.size() <= 100)) &&
+        (!('sender' in data) || (data.sender is string && data.sender.size() <= 200)) &&
+        (!('recipient' in data) || (data.recipient is string && data.recipient.size() <= 200)) &&
+        (!('trailerPlate' in data) || (data.trailerPlate is string && data.trailerPlate.size() <= 40)) &&
+        (!('sealNumber' in data) || (data.sealNumber is string && data.sealNumber.size() <= 64)) &&
         (!('status' in data) || (data.status is string && data.status in ['received', 'signed', 'scanned', 'sent'])) &&
-        (!('sendHistory' in data) || isValidSendHistory(data.sendHistory)) &&
+        (!('sendHistory' in data) || (data.sendHistory is list && data.sendHistory.size() <= 15)) &&
         (!('updatedAt' in data) || isValidIsoTimestamp(data.updatedAt));
     }
 
